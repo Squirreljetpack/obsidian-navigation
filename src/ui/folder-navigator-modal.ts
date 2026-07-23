@@ -1,5 +1,6 @@
 import { App, Keymap, SuggestModal, TAbstractFile, TFile, TFolder, WorkspaceLeaf, setIcon } from 'obsidian';
-import { SortOrder } from '../settings';
+import { FolderNavigatorSettings, SortOrder } from '../settings';
+import { openWithExternalProgram, revealInSystemExplorer } from '../utils/system';
 
 // Augment Obsidian's internal type definitions directly
 declare module 'obsidian' {
@@ -16,16 +17,19 @@ declare module 'obsidian' {
 export class FolderNavigatorModal extends SuggestModal<TAbstractFile> {
     currentFolder: TFolder;
     initialTarget: TAbstractFile | null;
+    settings: FolderNavigatorSettings;
     currentSort: SortOrder;
 
     constructor(
         app: App,
-        defaultSort: SortOrder,
+        settings: FolderNavigatorSettings,
         initialItem: TAbstractFile,
+        initialSort?: SortOrder,
     ) {
         super(app);
 
-        this.currentSort = defaultSort;
+        this.settings = settings;
+        this.currentSort = initialSort ?? settings.defaultSort;
 
         if (initialItem instanceof TFolder) {
             this.currentFolder = initialItem;
@@ -40,13 +44,48 @@ export class FolderNavigatorModal extends SuggestModal<TAbstractFile> {
     }
 
     private registerKeybindings(): void {
-        // Navigate UP to parent folder in-place
-        this.scope.register(['Mod'], 'ArrowUp', (evt) => {
+        // Navigate to parent folder in-place (Mod + Left)
+        this.scope.register(['Mod'], 'ArrowLeft', (evt) => {
             evt.preventDefault();
             if (this.currentFolder.parent) {
                 this.navigateToFolder(this.currentFolder.parent, this.currentFolder);
             }
         });
+
+        // Reveal in system explorer (Mod + Up)
+        this.scope.register(['Mod'], 'ArrowUp', (evt) => {
+            evt.preventDefault();
+            const target = this.getHighlightedItem() ?? this.currentFolder;
+            if (target) {
+                revealInSystemExplorer(this.app, target);
+            }
+        });
+
+        // Open with primary program (Mod + Down) - only if configured
+        const primaryProgram = this.settings.openWithProgram.trim();
+        if (primaryProgram) {
+            this.scope.register(['Mod'], 'ArrowDown', (evt) => {
+                evt.preventDefault();
+                const target = this.getHighlightedItem() ?? this.currentFolder;
+                if (target) {
+                    this.close();
+                    openWithExternalProgram(this.app, target, primaryProgram);
+                }
+            });
+        }
+
+        // Open with alternate program (Mod + Shift + Down) - only if configured
+        const altProgram = this.settings.openWithProgramAlt.trim();
+        if (altProgram) {
+            this.scope.register(['Mod', 'Shift'], 'ArrowDown', (evt) => {
+                evt.preventDefault();
+                const target = this.getHighlightedItem() ?? this.currentFolder;
+                if (target) {
+                    this.close();
+                    openWithExternalProgram(this.app, target, altProgram);
+                }
+            });
+        }
 
         // Open in horizontal split (Mod + -)
         this.scope.register(['Mod'], '-', (evt) => {
@@ -68,16 +107,30 @@ export class FolderNavigatorModal extends SuggestModal<TAbstractFile> {
     }
 
     private updateInstructions(): void {
-        this.setInstructions([
+        const instructions = [
             { command: '↑↓', purpose: 'Navigate' },
             { command: '↵', purpose: 'Open' },
             { command: 'Mod + ↵', purpose: 'Open in new tab' },
             { command: 'Mod + -', purpose: 'Horizontal pane' },
             { command: 'Mod + I', purpose: 'Vertical pane' },
             { command: 'Mod + S', purpose: `Cycle sort (${this.currentSort})` },
-            { command: 'Mod + ↑', purpose: 'Parent folder' },
-            { command: 'Esc', purpose: 'Dismiss' },
-        ]);
+            { command: 'Mod + ←', purpose: 'Parent folder' },
+            { command: 'Mod + ↑', purpose: 'Reveal in Finder' },
+        ];
+
+        const primaryProgram = this.settings.openWithProgram.trim();
+        if (primaryProgram) {
+            instructions.push({ command: 'Mod + ↓', purpose: `Open with ${primaryProgram}` });
+        }
+
+        const altProgram = this.settings.openWithProgramAlt.trim();
+        if (altProgram) {
+            instructions.push({ command: 'Mod + Shift + ↓', purpose: `Open with ${altProgram}` });
+        }
+
+        instructions.push({ command: 'Esc', purpose: 'Dismiss' });
+
+        this.setInstructions(instructions);
     }
 
     private cycleSort(): void {
@@ -137,7 +190,7 @@ export class FolderNavigatorModal extends SuggestModal<TAbstractFile> {
             }
             void leaf.openFile(item);
         } else if (item instanceof TFolder) {
-            new FolderNavigatorModal(this.app, this.currentSort, item).open();
+            new FolderNavigatorModal(this.app, this.settings, item, this.currentSort).open();
         }
     }
 
@@ -205,7 +258,7 @@ export class FolderNavigatorModal extends SuggestModal<TAbstractFile> {
             const leaf: WorkspaceLeaf = this.app.workspace.getLeaf(Keymap.isModEvent(evt));
             void leaf.openFile(item);
         } else if (item instanceof TFolder) {
-            new FolderNavigatorModal(this.app, this.currentSort, item).open();
+            new FolderNavigatorModal(this.app, this.settings, item, this.currentSort).open();
         }
     }
 }

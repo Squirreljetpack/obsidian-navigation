@@ -14,7 +14,7 @@ export default class FolderNavigatorPlugin extends Plugin {
 			name: 'Open',
 			callback: () => {
 				const initialItem = this.app.workspace.getActiveFile() ?? this.app.vault.getRoot();
-				new FolderNavigatorModal(this.app, this.settings.defaultSort, initialItem).open();
+				new FolderNavigatorModal(this.app, this.settings, initialItem).open();
 			},
 		});
 
