@@ -3,16 +3,26 @@ import type FolderNavigatorPlugin from './main';
 
 export type SortOrder = 'name' | 'atime' | 'mtime';
 
+export interface CustomHotkeyCommand {
+	id: string;
+	hotkey: string;
+	command: string;
+}
+
 export interface FolderNavigatorSettings {
 	defaultSort: SortOrder;
-	openWithProgram: string;
-	openWithProgramAlt: string;
+	macosPath: string;
+	windowsPath: string;
+	linuxPath: string;
+	customCommands: CustomHotkeyCommand[];
 }
 
 export const DEFAULT_SETTINGS: FolderNavigatorSettings = {
 	defaultSort: 'name',
-	openWithProgram: '',
-	openWithProgramAlt: '',
+	macosPath: '/usr/local/bin:/opt/homebrew/bin:~/.local/bin',
+	windowsPath: '',
+	linuxPath: '/usr/local/bin:~/.local/bin',
+	customCommands: [],
 };
 
 export class FolderNavigatorSettingTab extends PluginSettingTab {
@@ -47,29 +57,94 @@ export class FolderNavigatorSettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName('Open with program')
-			.setDesc('Executable command used to open files externally (e.g. Code, code -r, subl). Triggered in navigator with mod + ↓ when configured.')
+			.setName('macOS path additions')
+			.setDesc('Colon-separated directory paths appended to path on macOS (e.g. /usr/local/bin:/opt/homebrew/bin).')
 			.addText((text) =>
 				text
-					.setPlaceholder('Code')
-					.setValue(this.plugin.settings.openWithProgram)
+					.setPlaceholder('/opt/homebrew/bin')
+					.setValue(this.plugin.settings.macosPath)
 					.onChange(async (value: string) => {
-						this.plugin.settings.openWithProgram = value;
+						this.plugin.settings.macosPath = value;
 						await this.plugin.saveSettings();
 					}),
 			);
 
 		new Setting(containerEl)
-			.setName('Alternate open with program')
-			.setDesc('Alternate executable command used to open files externally. Triggered in navigator with mod + shift + ↓ when configured.')
+			.setName('Windows path additions')
+			.setDesc('Semicolon-separated directory paths appended to path on Windows.')
 			.addText((text) =>
 				text
-					.setPlaceholder('Cursor')
-					.setValue(this.plugin.settings.openWithProgramAlt)
+					.setPlaceholder('C:\\program files')
+					.setValue(this.plugin.settings.windowsPath)
 					.onChange(async (value: string) => {
-						this.plugin.settings.openWithProgramAlt = value;
+						this.plugin.settings.windowsPath = value;
 						await this.plugin.saveSettings();
 					}),
 			);
+
+		new Setting(containerEl)
+			.setName('Linux path additions')
+			.setDesc('Colon-separated directory paths appended to path on Linux (e.g. /usr/local/bin:~/.local/bin).')
+			.addText((text) =>
+				text
+					.setPlaceholder('/usr/local/bin')
+					.setValue(this.plugin.settings.linuxPath)
+					.onChange(async (value: string) => {
+						this.plugin.settings.linuxPath = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
+		new Setting(containerEl)
+			.setName('Custom hotkey commands')
+			.setDesc('Define hotkey mappings and program command templates. Use {} for the target file or folder path.')
+			.addButton((button) =>
+				button
+					.setButtonText('Add hotkey command')
+					.setCta()
+					.onClick(async () => {
+						this.plugin.settings.customCommands.push({
+							id: Date.now().toString(),
+							hotkey: '',
+							command: '',
+						});
+						await this.plugin.saveSettings();
+						this.display();
+					}),
+			);
+
+		this.plugin.settings.customCommands.forEach((cmdItem, index) => {
+			const setting = new Setting(containerEl)
+				.addText((text) =>
+					text
+						.setPlaceholder('Mod+down')
+						.setValue(cmdItem.hotkey)
+						.onChange(async (val) => {
+							cmdItem.hotkey = val;
+							await this.plugin.saveSettings();
+						}),
+				)
+				.addText((text) =>
+					text
+						.setPlaceholder('Code {}')
+						.setValue(cmdItem.command)
+						.onChange(async (val) => {
+							cmdItem.command = val;
+							await this.plugin.saveSettings();
+						}),
+				)
+				.addButton((button) =>
+					button
+						.setButtonText('Delete')
+						.setWarning()
+						.onClick(async () => {
+							this.plugin.settings.customCommands.splice(index, 1);
+							await this.plugin.saveSettings();
+							this.display();
+						}),
+				);
+
+			setting.infoEl.remove();
+		});
 	}
 }

@@ -1,299 +1,329 @@
-import { App, Keymap, SuggestModal, TAbstractFile, TFile, TFolder, WorkspaceLeaf, setIcon } from 'obsidian';
-import { FolderNavigatorSettings, SortOrder } from '../settings';
-import { openWithExternalProgram, revealInSystemExplorer } from '../utils/system';
+import {
+  App,
+  Hotkey,
+  Keymap,
+  Modifier,
+  Platform,
+  setIcon,
+  SuggestModal,
+  TAbstractFile,
+  TFile,
+  TFolder,
+  WorkspaceLeaf,
+} from "obsidian";
+import { FolderNavigatorSettings, SortOrder } from "../settings";
+import { parseHotkey } from "../utils/hotkey-parser";
+import { openWithExternalProgram, revealInSystemExplorer } from "../utils/system";
 
 // Augment Obsidian's internal type definitions directly
-declare module 'obsidian' {
-    interface SuggestModal<T> {
-        chooser?: {
-            values?: T[];
-            selectedItem: number;
-            setSelectedItem(index: number, evt?: MouseEvent | KeyboardEvent): void;
-            updateSuggestions?(): void;
-        };
-    }
+declare module "obsidian" {
+  interface SuggestModal<T> {
+    chooser?: {
+      values?: T[];
+      selectedItem: number;
+      setSelectedItem(index: number, evt?: MouseEvent | KeyboardEvent): void;
+      updateSuggestions?(): void;
+    };
+  }
+}
+
+interface ActiveCustomHotkey {
+  hotkey: Hotkey;
+  command: string;
 }
 
 export class FolderNavigatorModal extends SuggestModal<TAbstractFile> {
-    currentFolder: TFolder;
-    initialTarget: TAbstractFile | null;
-    settings: FolderNavigatorSettings;
-    currentSort: SortOrder;
+  currentFolder: TFolder;
+  initialTarget: TAbstractFile | null;
+  settings: FolderNavigatorSettings;
+  currentSort: SortOrder;
+  activeCustomHotkeys: ActiveCustomHotkey[] = [];
 
-    constructor(
-        app: App,
-        settings: FolderNavigatorSettings,
-        initialItem: TAbstractFile,
-        initialSort?: SortOrder,
-    ) {
-        super(app);
+  constructor(
+    app: App,
+    settings: FolderNavigatorSettings,
+    initialItem: TAbstractFile,
+    initialSort?: SortOrder,
+  ) {
+    super(app);
 
-        this.settings = settings;
-        this.currentSort = initialSort ?? settings.defaultSort;
+    this.settings = settings;
+    this.currentSort = initialSort ?? settings.defaultSort;
 
-        if (initialItem instanceof TFolder) {
-            this.currentFolder = initialItem;
-            this.initialTarget = null;
-        } else {
-            this.currentFolder = initialItem.parent ?? this.app.vault.getRoot();
-            this.initialTarget = initialItem;
-        }
-
-        this.updateInstructions();
-        this.registerKeybindings();
+    if (initialItem instanceof TFolder) {
+      this.currentFolder = initialItem;
+      this.initialTarget = null;
+    } else {
+      this.currentFolder = initialItem.parent ?? this.app.vault.getRoot();
+      this.initialTarget = initialItem;
     }
 
-    private registerKeybindings(): void {
-        // Parent folder (Mod + Left)
-        const handleParentNav = (evt: KeyboardEvent) => {
-            evt.preventDefault();
-            evt.stopPropagation();
-            if (this.currentFolder.parent) {
-                this.navigateToFolder(this.currentFolder.parent, this.currentFolder);
-            }
-        };
+    this.prepareCustomHotkeys();
+    this.updateInstructions();
+    this.registerKeybindings();
+  }
 
-        this.scope.register(['Mod'], 'ArrowLeft', (evt) => handleParentNav(evt));
-        this.scope.register(['Mod'], 'Left', (evt) => handleParentNav(evt));
+  private prepareCustomHotkeys(): void {
+    this.activeCustomHotkeys = [];
+    for (const item of this.settings.customCommands ?? []) {
+      const command = item.command.trim();
+      if (!command) continue;
 
-        // Reveal in system explorer (Mod + Up)
-        const handleReveal = (evt: KeyboardEvent) => {
-            evt.preventDefault();
-            evt.stopPropagation();
-            const target = this.getHighlightedItem() ?? this.currentFolder;
-            if (target) {
-                revealInSystemExplorer(this.app, target);
-            }
-        };
-
-        this.scope.register(['Mod'], 'ArrowUp', (evt) => handleReveal(evt));
-        this.scope.register(['Mod'], 'Up', (evt) => handleReveal(evt));
-
-        // Open with primary program (Mod + Down)
-        const primaryProgram = this.settings.openWithProgram.trim();
-        const handlePrimaryOpen = (evt: KeyboardEvent) => {
-            evt.preventDefault();
-            evt.stopPropagation();
-            const target = this.getHighlightedItem() ?? this.currentFolder;
-            if (target) {
-                this.close();
-                openWithExternalProgram(this.app, target, primaryProgram);
-            }
-        };
-
-        if (primaryProgram) {
-            this.scope.register(['Mod'], 'ArrowDown', (evt) => handlePrimaryOpen(evt));
-            this.scope.register(['Mod'], 'Down', (evt) => handlePrimaryOpen(evt));
-        }
-
-        // Open with alternate program (Mod + Shift + Down)
-        const altProgram = this.settings.openWithProgramAlt.trim();
-        const handleAltOpen = (evt: KeyboardEvent) => {
-            evt.preventDefault();
-            evt.stopPropagation();
-            const target = this.getHighlightedItem() ?? this.currentFolder;
-            if (target) {
-                this.close();
-                openWithExternalProgram(this.app, target, altProgram);
-            }
-        };
-
-        if (altProgram) {
-            this.scope.register(['Mod', 'Shift'], 'ArrowDown', (evt) => handleAltOpen(evt));
-            this.scope.register(['Mod', 'Shift'], 'Down', (evt) => handleAltOpen(evt));
-        }
-
-        // Direct DOM keydown handler on inputEl to intercept browser text editing navigation
-        this.inputEl.addEventListener('keydown', (evt: KeyboardEvent) => {
-            if (!Keymap.isModEvent(evt)) return;
-
-            const isLeft = evt.key === 'ArrowLeft' || evt.key === 'Left';
-            const isUp = evt.key === 'ArrowUp' || evt.key === 'Up';
-            const isDown = evt.key === 'ArrowDown' || evt.key === 'Down';
-
-            if (isLeft && !evt.shiftKey && !evt.altKey) {
-                handleParentNav(evt);
-            } else if (isUp && !evt.shiftKey && !evt.altKey) {
-                handleReveal(evt);
-            } else if (isDown && !evt.shiftKey && !evt.altKey && primaryProgram) {
-                handlePrimaryOpen(evt);
-            } else if (isDown && evt.shiftKey && !evt.altKey && altProgram) {
-                handleAltOpen(evt);
-            }
+      const hotkey = parseHotkey(item.hotkey);
+      if (hotkey) {
+        this.activeCustomHotkeys.push({
+          hotkey,
+          command,
         });
-
-        // Open in horizontal split (Mod + -)
-        this.scope.register(['Mod'], '-', (evt) => {
-            evt.preventDefault();
-            this.openSelectedItem('horizontal');
-        });
-
-        // Open in vertical split (Mod + I)
-        this.scope.register(['Mod'], 'i', (evt) => {
-            evt.preventDefault();
-            this.openSelectedItem('vertical');
-        });
-
-        // Cycle sort mode (Mod + S)
-        this.scope.register(['Mod'], 's', (evt) => {
-            evt.preventDefault();
-            this.cycleSort();
-        });
+      }
     }
+  }
 
-    private updateInstructions(): void {
-        const instructions = [
-            { command: '↑↓', purpose: 'Navigate' },
-            { command: '↵', purpose: 'Open' },
-            { command: 'Mod + ↵', purpose: 'Open in new tab' },
-            { command: 'Mod + -', purpose: 'Horizontal pane' },
-            { command: 'Mod + I', purpose: 'Vertical pane' },
-            { command: 'Mod + S', purpose: `Cycle sort (${this.currentSort})` },
-            { command: 'Mod + ←', purpose: 'Parent folder' },
-            { command: 'Mod + ↑', purpose: 'Reveal in Finder' },
-        ];
+  private registerKeybindings(): void {
+    // Parent folder (Mod + Up)
+    this.scope.register(["Mod"], "ArrowUp", (evt) => {
+      evt.preventDefault();
+      if (this.currentFolder.parent) {
+        this.navigateToFolder(this.currentFolder.parent, this.currentFolder);
+      }
+    });
 
-        const primaryProgram = this.settings.openWithProgram.trim();
-        if (primaryProgram) {
-            instructions.push({ command: 'Mod + ↓', purpose: `Open with ${primaryProgram}` });
+    // Reveal in system explorer (Mod + Shift + Down)
+    this.scope.register(["Mod", "Shift"], "ArrowDown", (evt) => {
+      evt.preventDefault();
+      const target = this.getHighlightedItem() ?? this.currentFolder;
+      if (target) {
+        revealInSystemExplorer(this.app, target);
+      }
+    });
+
+    // Open in new tab (Mod + Enter)
+    this.scope.register(["Mod"], "Enter", (evt) => {
+      evt.preventDefault();
+      this.openSelectedItem("tab");
+    });
+
+    // Register custom hotkey commands directly on Scope using Obsidian's Hotkey model
+    for (const item of this.activeCustomHotkeys) {
+      this.scope.register(item.hotkey.modifiers, item.hotkey.key, (evt) => {
+        evt.preventDefault();
+        const target = this.getHighlightedItem() ?? this.currentFolder;
+        if (target) {
+          this.close();
+          openWithExternalProgram(this.app, target, item.command, this.settings);
         }
-
-        const altProgram = this.settings.openWithProgramAlt.trim();
-        if (altProgram) {
-            instructions.push({ command: 'Mod + Shift + ↓', purpose: `Open with ${altProgram}` });
-        }
-
-        instructions.push({ command: 'Esc', purpose: 'Dismiss' });
-
-        this.setInstructions(instructions);
+      });
     }
 
-    private cycleSort(): void {
-        const nextSortMode: Record<SortOrder, SortOrder> = {
-            name: 'atime',
-            atime: 'mtime',
-            mtime: 'name',
-        };
+    // Open in horizontal split (Mod + -)
+    this.scope.register(["Mod"], "-", (evt) => {
+      evt.preventDefault();
+      this.openSelectedItem("horizontal");
+    });
 
-        this.currentSort = nextSortMode[this.currentSort] ?? 'name';
-        this.updateInstructions();
+    // Open in vertical split (Mod + I)
+    this.scope.register(["Mod"], "i", (evt) => {
+      evt.preventDefault();
+      this.openSelectedItem("vertical");
+    });
 
-        const currentlyHighlighted = this.getHighlightedItem();
-        if (currentlyHighlighted) {
-            this.initialTarget = currentlyHighlighted;
-        }
+    // Cycle sort mode (Mod + S)
+    this.scope.register(["Mod"], "s", (evt) => {
+      evt.preventDefault();
+      this.cycleSort();
+    });
+  }
 
-        this.refreshSuggestions();
-        this.restoreCursorToTarget();
+  private formatHotkey(hotkey: Hotkey): string {
+    try {
+      if (this.app.hotkeyManager?.printHotkey) {
+        const nativeStr = this.app.hotkeyManager.printHotkey(hotkey);
+        if (nativeStr) return nativeStr;
+      }
+    } catch {
+      // Ignore error and fall through to fallback
     }
 
-    private navigateToFolder(newFolder: TFolder, newTarget: TAbstractFile | null = null): void {
-        this.currentFolder = newFolder;
-        this.initialTarget = newTarget;
-        this.inputEl.value = ''; // Clear search filter on navigation
+    const isMac = Platform.isMacOS;
+    const modMap: Record<Modifier, string> = {
+      Mod: isMac ? "⌘" : "⌃",
+      Meta: "⌘",
+      Ctrl: "⌃",
+      Alt: "⌥",
+      Shift: "⇧",
+    };
 
-        this.refreshSuggestions();
-        this.restoreCursorToTarget();
+    const formattedMods = hotkey.modifiers.map((m) => modMap[m] || m);
+    const keyMap: Record<string, string> = {
+      ArrowUp: "↑",
+      Up: "↑",
+      ArrowDown: "↓",
+      Down: "↓",
+      ArrowLeft: "←",
+      Left: "←",
+      ArrowRight: "→",
+      Right: "→",
+      Enter: "↵",
+      Return: "↵",
+      Space: "␣",
+      Backspace: "⌫",
+    };
+
+    const formattedKey = keyMap[hotkey.key] || (hotkey.key.length === 1 ? hotkey.key.toUpperCase() : hotkey.key);
+    return [...formattedMods, formattedKey].join(" + ");
+  }
+
+  private updateInstructions(): void {
+    const printHk = (modifiers: Modifier[], key: string) => this.formatHotkey({ modifiers, key });
+
+    const instructions = [
+      { command: "↑↓", purpose: "Navigate" },
+      { command: "↵", purpose: "Open" },
+      { command: printHk(["Mod"], "Enter"), purpose: "Open in new tab" },
+      { command: printHk(["Mod"], "-"), purpose: "Horizontal pane" },
+      { command: printHk(["Mod"], "i"), purpose: "Vertical pane" },
+      { command: printHk(["Mod"], "s"), purpose: `Cycle sort (${this.currentSort})` },
+      { command: printHk(["Mod"], "ArrowUp"), purpose: "Parent folder" },
+      { command: printHk(["Mod", "Shift"], "ArrowDown"), purpose: "Reveal in Finder" },
+    ];
+
+    for (const item of this.activeCustomHotkeys) {
+      instructions.push({
+        command: this.formatHotkey(item.hotkey),
+        purpose: item.command,
+      });
     }
 
-    private refreshSuggestions(): void {
-        if (this.chooser?.updateSuggestions) {
-            this.chooser.updateSuggestions();
-        } else {
-            this.inputEl.dispatchEvent(new Event('input'));
-        }
+    instructions.push({ command: "Esc", purpose: "Dismiss" });
+
+    this.setInstructions(instructions);
+  }
+
+  private cycleSort(): void {
+    const nextSortMode: Record<SortOrder, SortOrder> = {
+      name: "atime",
+      atime: "mtime",
+      mtime: "name",
+    };
+
+    this.currentSort = nextSortMode[this.currentSort] ?? "name";
+    this.updateInstructions();
+
+    const currentlyHighlighted = this.getHighlightedItem();
+    if (currentlyHighlighted) {
+      this.initialTarget = currentlyHighlighted;
     }
 
-    private getHighlightedItem(): TAbstractFile | null {
-        if (this.chooser?.values && typeof this.chooser.selectedItem === 'number') {
-            return this.chooser.values[this.chooser.selectedItem] ?? null;
-        }
-        return null;
+    this.refreshSuggestions();
+    this.restoreCursorToTarget();
+  }
+
+  private navigateToFolder(newFolder: TFolder, newTarget: TAbstractFile | null = null): void {
+    this.currentFolder = newFolder;
+    this.initialTarget = newTarget;
+    this.inputEl.value = ""; // Clear search filter on navigation
+
+    this.refreshSuggestions();
+    this.restoreCursorToTarget();
+  }
+
+  private refreshSuggestions(): void {
+    if (this.chooser?.updateSuggestions) {
+      this.chooser.updateSuggestions();
+    } else {
+      this.inputEl.dispatchEvent(new Event("input"));
     }
+  }
 
-    private openSelectedItem(mode: 'tab' | 'horizontal' | 'vertical'): void {
-        const item = this.getHighlightedItem();
-        if (!item) return;
-
-        this.close();
-        if (item instanceof TFile) {
-            let leaf: WorkspaceLeaf;
-            if (mode === 'tab') {
-                leaf = this.app.workspace.getLeaf('tab');
-            } else {
-                leaf = this.app.workspace.getLeaf('split', mode);
-            }
-            void leaf.openFile(item);
-        } else if (item instanceof TFolder) {
-            new FolderNavigatorModal(this.app, this.settings, item, this.currentSort).open();
-        }
+  private getHighlightedItem(): TAbstractFile | null {
+    if (this.chooser?.values && typeof this.chooser.selectedItem === "number") {
+      return this.chooser.values[this.chooser.selectedItem] ?? null;
     }
+    return null;
+  }
 
-    private restoreCursorToTarget(): void {
-        if (!this.initialTarget) return;
+  private openSelectedItem(mode: "tab" | "horizontal" | "vertical"): void {
+    const item = this.getHighlightedItem();
+    if (!item) return;
 
-        if (this.chooser?.values) {
-            const targetPath = this.initialTarget.path;
-            const index = this.chooser.values.findIndex((v) => v?.path === targetPath);
-
-            if (index !== -1) {
-                this.chooser.setSelectedItem(index);
-            }
-        }
+    this.close();
+    if (item instanceof TFile) {
+      let leaf: WorkspaceLeaf;
+      if (mode === "tab") {
+        leaf = this.app.workspace.getLeaf("tab");
+      } else {
+        leaf = this.app.workspace.getLeaf("split", mode);
+      }
+      void leaf.openFile(item);
+    } else if (item instanceof TFolder) {
+      new FolderNavigatorModal(this.app, this.settings, item, this.currentSort).open();
     }
+  }
 
-    onOpen(): void {
-        void super.onOpen();
-        if (!this.inputEl.value) {
-            this.restoreCursorToTarget();
-        }
+  private restoreCursorToTarget(): void {
+    if (!this.initialTarget) return;
+
+    if (this.chooser?.values) {
+      const targetPath = this.initialTarget.path;
+      const index = this.chooser.values.findIndex((v) => v?.path === targetPath);
+
+      if (index !== -1) {
+        this.chooser.setSelectedItem(index);
+      }
     }
+  }
 
-    getSuggestions(query: string): TAbstractFile[] {
-        const lowerQuery = query.toLowerCase();
-        const children = this.currentFolder.children.filter((f) =>
-            f.name.toLowerCase().includes(lowerQuery),
-        );
-
-        return children.sort((a, b) => {
-            // Priority: Folders first
-            if (a instanceof TFolder && b instanceof TFile) return -1;
-            if (a instanceof TFile && b instanceof TFolder) return 1;
-
-            // Secondary: Apply selected sort field
-            if (this.currentSort === 'mtime') {
-                const aMtime = a instanceof TFile ? a.stat.mtime : 0;
-                const bMtime = b instanceof TFile ? b.stat.mtime : 0;
-                if (bMtime !== aMtime) return bMtime - aMtime;
-            } else if (this.currentSort === 'atime') {
-                const aAtime = a instanceof TFile ? ((a.stat as { atime?: number }).atime ?? a.stat.ctime) : 0;
-                const bAtime = b instanceof TFile ? ((b.stat as { atime?: number }).atime ?? b.stat.ctime) : 0;
-                if (bAtime !== aAtime) return bAtime - aAtime;
-            }
-
-            // Fallback: Alphabetical
-            return a.name.localeCompare(b.name);
-        });
+  onOpen(): void {
+    void super.onOpen();
+    if (!this.inputEl.value) {
+      this.restoreCursorToTarget();
     }
+  }
 
-    renderSuggestion(file: TAbstractFile, el: HTMLElement): void {
-        el.addClass('folder-navigator-item');
+  getSuggestions(query: string): TAbstractFile[] {
+    const lowerQuery = query.toLowerCase();
+    const children = this.currentFolder.children.filter((f) => f.name.toLowerCase().includes(lowerQuery));
 
-        const isFolder = file instanceof TFolder;
-        const iconEl = el.createSpan({ cls: 'folder-navigator-icon' });
+    return children.sort((a, b) => {
+      // Priority: Folders first
+      if (a instanceof TFolder && b instanceof TFile) return -1;
+      if (a instanceof TFile && b instanceof TFolder) return 1;
 
-        el.createSpan({ text: file.name, cls: 'folder-navigator-name' });
-        el.addClass(isFolder ? 'is-folder' : 'is-file');
+      // Secondary: Apply selected sort field
+      if (this.currentSort === "mtime") {
+        const aMtime = a instanceof TFile ? a.stat.mtime : 0;
+        const bMtime = b instanceof TFile ? b.stat.mtime : 0;
+        if (bMtime !== aMtime) return bMtime - aMtime;
+      } else if (this.currentSort === "atime") {
+        const aAtime = a instanceof TFile ? ((a.stat as { atime?: number }).atime ?? a.stat.ctime) : 0;
+        const bAtime = b instanceof TFile ? ((b.stat as { atime?: number }).atime ?? b.stat.ctime) : 0;
+        if (bAtime !== aAtime) return bAtime - aAtime;
+      }
 
-        setIcon(iconEl, isFolder ? 'folder' : 'file-text');
+      // Fallback: Alphabetical
+      return a.name.localeCompare(b.name);
+    });
+  }
+
+  renderSuggestion(file: TAbstractFile, el: HTMLElement): void {
+    el.addClass("folder-navigator-item");
+
+    const isFolder = file instanceof TFolder;
+    const iconEl = el.createSpan({ cls: "folder-navigator-icon" });
+
+    el.createSpan({ text: file.name, cls: "folder-navigator-name" });
+    el.addClass(isFolder ? "is-folder" : "is-file");
+
+    setIcon(iconEl, isFolder ? "folder" : "file-text");
+  }
+
+  onChooseSuggestion(item: TAbstractFile, evt: MouseEvent | KeyboardEvent): void {
+    if (item instanceof TFile) {
+      const isMod = Keymap.isModEvent(evt);
+      const leaf: WorkspaceLeaf = this.app.workspace.getLeaf(isMod ? "tab" : false);
+      void leaf.openFile(item);
+    } else if (item instanceof TFolder) {
+      new FolderNavigatorModal(this.app, this.settings, item, this.currentSort).open();
     }
-
-    onChooseSuggestion(item: TAbstractFile, evt: MouseEvent | KeyboardEvent): void {
-        if (item instanceof TFile) {
-            const leaf: WorkspaceLeaf = this.app.workspace.getLeaf(Keymap.isModEvent(evt));
-            void leaf.openFile(item);
-        } else if (item instanceof TFolder) {
-            new FolderNavigatorModal(this.app, this.settings, item, this.currentSort).open();
-        }
-    }
+  }
 }

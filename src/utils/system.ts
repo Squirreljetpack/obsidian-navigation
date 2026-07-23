@@ -1,4 +1,5 @@
 import { App, FileSystemAdapter, Notice, Platform, TAbstractFile } from 'obsidian';
+import { FolderNavigatorSettings } from '../settings';
 
 /**
  * Reveals a file or folder in the system file explorer (Finder on macOS, File Explorer on Windows, etc.).
@@ -33,10 +34,56 @@ export function revealInSystemExplorer(app: App, file: TAbstractFile): void {
 }
 
 /**
- * Opens a file or folder with an external program command (e.g., `code`, `code -r`, `subl`).
+ * Retrieves the OS-specific PATH addition string from settings.
  */
-export function openWithExternalProgram(app: App, file: TAbstractFile, programCommand: string): void {
-	const command = programCommand.trim();
+function getOsPathAdditions(settings: FolderNavigatorSettings): string {
+	if (Platform.isMacOS) {
+		return settings.macosPath || '';
+	}
+	if (Platform.isWin) {
+		return settings.windowsPath || '';
+	}
+	return settings.linuxPath || '';
+}
+
+/**
+ * Builds the environment object with expanded PATH additions.
+ */
+function buildExecEnvironment(settings: FolderNavigatorSettings): Record<string, string | undefined> {
+	const additions = getOsPathAdditions(settings).trim();
+	const winWithProc = window as unknown as { process?: { env?: Record<string, string | undefined> } };
+	const sysEnv = winWithProc.process?.env ?? {};
+
+	if (!additions) {
+		return { ...sysEnv };
+	}
+
+	const homeDir = sysEnv.HOME || sysEnv.USERPROFILE || '';
+	const expandedAdditions = additions.replace(/~/g, homeDir);
+	const pathDelimiter = Platform.isWin ? ';' : ':';
+	const existingPath = sysEnv.PATH || '';
+
+	const combinedPath = existingPath
+		? `${expandedAdditions}${pathDelimiter}${existingPath}`
+		: expandedAdditions;
+
+	return {
+		...sysEnv,
+		PATH: combinedPath,
+	};
+}
+
+/**
+ * Opens a file or folder with an external program command template (e.g. `code`, `subl {}`).
+ * Supports `{}` template variable and OS-specific PATH additions.
+ */
+export function openWithExternalProgram(
+	app: App,
+	file: TAbstractFile,
+	commandTemplate: string,
+	settings: FolderNavigatorSettings,
+): void {
+	const command = commandTemplate.trim();
 	if (!command) {
 		return;
 	}
@@ -53,14 +100,28 @@ export function openWithExternalProgram(app: App, file: TAbstractFile, programCo
 
 	try {
 		const childProcess = window.require('child_process') as {
-			exec: (cmd: string, callback: (error: Error | null) => void) => void;
+			exec: (
+				cmd: string,
+				options: { env: Record<string, string | undefined> },
+				callback: (error: Error | null) => void,
+			) => void;
 		};
 
 		const fullPath = app.vault.adapter.getFullPath(file.path);
 		const escapedPath = fullPath.replace(/"/g, '\\"');
-		const finalCommand = `${command} "${escapedPath}"`;
 
-		childProcess.exec(finalCommand, (error) => {
+		let finalCommand: string;
+		if (command.includes('{}')) {
+			finalCommand = command.replace(/{}/g, `"${escapedPath}"`);
+		} else if (command.includes('{file}')) {
+			finalCommand = command.replace(/{file}/g, `"${escapedPath}"`);
+		} else {
+			finalCommand = `${command} "${escapedPath}"`;
+		}
+
+		const env = buildExecEnvironment(settings);
+
+		childProcess.exec(finalCommand, { env }, (error) => {
 			if (error) {
 				console.error(`Failed to open item with program command "${finalCommand}":`, error);
 				new Notice(`Failed to open with "${command}": ${error.message}`);
