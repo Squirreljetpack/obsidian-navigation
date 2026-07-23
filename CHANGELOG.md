@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0
+
+- **Feature**: Bind `Mod + ←` in navigator modal to navigate up to parent folder in-place.
+- **Feature**: Bind `Mod + ↑` in navigator modal to reveal highlighted item or current folder in system explorer (Finder / File Explorer).
+- **Feature**: Add configurable primary (`Mod + ↓`) and alternate (`Mod + Shift + ↓`) external program launch commands in settings (disabled by default when empty).
+
 ## 1.0.1
 
 - **Fix**: Ensure sort order keybind (`Mod + S`) immediately updates the displayed results in the modal list.
