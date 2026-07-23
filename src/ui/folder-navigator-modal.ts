@@ -44,48 +44,83 @@ export class FolderNavigatorModal extends SuggestModal<TAbstractFile> {
     }
 
     private registerKeybindings(): void {
-        // Navigate to parent folder in-place (Mod + Left)
-        this.scope.register(['Mod'], 'ArrowLeft', (evt) => {
+        // Parent folder (Mod + Left)
+        const handleParentNav = (evt: KeyboardEvent) => {
             evt.preventDefault();
+            evt.stopPropagation();
             if (this.currentFolder.parent) {
                 this.navigateToFolder(this.currentFolder.parent, this.currentFolder);
             }
-        });
+        };
+
+        this.scope.register(['Mod'], 'ArrowLeft', (evt) => handleParentNav(evt));
+        this.scope.register(['Mod'], 'Left', (evt) => handleParentNav(evt));
 
         // Reveal in system explorer (Mod + Up)
-        this.scope.register(['Mod'], 'ArrowUp', (evt) => {
+        const handleReveal = (evt: KeyboardEvent) => {
             evt.preventDefault();
+            evt.stopPropagation();
             const target = this.getHighlightedItem() ?? this.currentFolder;
             if (target) {
                 revealInSystemExplorer(this.app, target);
             }
-        });
+        };
 
-        // Open with primary program (Mod + Down) - only if configured
+        this.scope.register(['Mod'], 'ArrowUp', (evt) => handleReveal(evt));
+        this.scope.register(['Mod'], 'Up', (evt) => handleReveal(evt));
+
+        // Open with primary program (Mod + Down)
         const primaryProgram = this.settings.openWithProgram.trim();
+        const handlePrimaryOpen = (evt: KeyboardEvent) => {
+            evt.preventDefault();
+            evt.stopPropagation();
+            const target = this.getHighlightedItem() ?? this.currentFolder;
+            if (target) {
+                this.close();
+                openWithExternalProgram(this.app, target, primaryProgram);
+            }
+        };
+
         if (primaryProgram) {
-            this.scope.register(['Mod'], 'ArrowDown', (evt) => {
-                evt.preventDefault();
-                const target = this.getHighlightedItem() ?? this.currentFolder;
-                if (target) {
-                    this.close();
-                    openWithExternalProgram(this.app, target, primaryProgram);
-                }
-            });
+            this.scope.register(['Mod'], 'ArrowDown', (evt) => handlePrimaryOpen(evt));
+            this.scope.register(['Mod'], 'Down', (evt) => handlePrimaryOpen(evt));
         }
 
-        // Open with alternate program (Mod + Shift + Down) - only if configured
+        // Open with alternate program (Mod + Shift + Down)
         const altProgram = this.settings.openWithProgramAlt.trim();
+        const handleAltOpen = (evt: KeyboardEvent) => {
+            evt.preventDefault();
+            evt.stopPropagation();
+            const target = this.getHighlightedItem() ?? this.currentFolder;
+            if (target) {
+                this.close();
+                openWithExternalProgram(this.app, target, altProgram);
+            }
+        };
+
         if (altProgram) {
-            this.scope.register(['Mod', 'Shift'], 'ArrowDown', (evt) => {
-                evt.preventDefault();
-                const target = this.getHighlightedItem() ?? this.currentFolder;
-                if (target) {
-                    this.close();
-                    openWithExternalProgram(this.app, target, altProgram);
-                }
-            });
+            this.scope.register(['Mod', 'Shift'], 'ArrowDown', (evt) => handleAltOpen(evt));
+            this.scope.register(['Mod', 'Shift'], 'Down', (evt) => handleAltOpen(evt));
         }
+
+        // Direct DOM keydown handler on inputEl to intercept browser text editing navigation
+        this.inputEl.addEventListener('keydown', (evt: KeyboardEvent) => {
+            if (!Keymap.isModEvent(evt)) return;
+
+            const isLeft = evt.key === 'ArrowLeft' || evt.key === 'Left';
+            const isUp = evt.key === 'ArrowUp' || evt.key === 'Up';
+            const isDown = evt.key === 'ArrowDown' || evt.key === 'Down';
+
+            if (isLeft && !evt.shiftKey && !evt.altKey) {
+                handleParentNav(evt);
+            } else if (isUp && !evt.shiftKey && !evt.altKey) {
+                handleReveal(evt);
+            } else if (isDown && !evt.shiftKey && !evt.altKey && primaryProgram) {
+                handlePrimaryOpen(evt);
+            } else if (isDown && evt.shiftKey && !evt.altKey && altProgram) {
+                handleAltOpen(evt);
+            }
+        });
 
         // Open in horizontal split (Mod + -)
         this.scope.register(['Mod'], '-', (evt) => {
