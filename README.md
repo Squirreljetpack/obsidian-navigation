@@ -26,30 +26,7 @@ Various navigation-related tools for Obsidian.
 Install via BRAT with the repo URL:
 
 ```
-Squirreljetpack/obsidian-show-stuffs
-```
-
-## Development
-
-### Prerequisites
-
-- Node.js (v18+ recommended)
-- npm
-
-### Build Commands
-
-```bash
-# Install dependencies
-npm install
-
-# Start development build mode (watch mode)
-npm run dev
-
-# Lint code
-npm run lint
-
-# Build production bundle
-npm run build
+Squirreljetpack/obsidian-navigation
 ```
 
 ## License

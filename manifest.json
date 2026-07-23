@@ -1,7 +1,7 @@
 {
 	"id": "obsidian-navigation",
 	"name": "Navigation Tools",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "1.0.0",
 	"description": "Miscellaneous obsidian navigation tools",
 	"author": "Squirreljetpack",
