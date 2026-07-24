@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0
+
+- **Feature**: Add `Toggle fullscreen` command to toggle Obsidian fullscreen mode while automatically collapsing/expanding sidebars.
+
 ## 1.1.0
 
 - **Feature**: Bind `Mod + ←` in navigator modal to navigate up to parent folder in-place.
