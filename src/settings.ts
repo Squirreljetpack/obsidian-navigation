@@ -11,6 +11,7 @@ export interface CustomHotkeyCommand {
 
 export interface FolderNavigatorSettings {
 	defaultSort: SortOrder;
+	enterZenOnFullscreen: boolean;
 	macosPath: string;
 	windowsPath: string;
 	linuxPath: string;
@@ -19,6 +20,7 @@ export interface FolderNavigatorSettings {
 
 export const DEFAULT_SETTINGS: FolderNavigatorSettings = {
 	defaultSort: 'name',
+	enterZenOnFullscreen: false,
 	macosPath: '/usr/local/bin:/opt/homebrew/bin:~/.local/bin',
 	windowsPath: '',
 	linuxPath: '/usr/local/bin:~/.local/bin',
@@ -55,6 +57,19 @@ export class FolderNavigatorSettingTab extends PluginSettingTab {
 						await this.plugin.saveSettings();
 					}),
 			);
+
+		new Setting(containerEl)
+			.setName('Enter zen mode on fullscreen')
+			.setDesc('Enable Maxymillion/zen mode upon entering fullscreen mode.')
+			.addToggle((toggle) =>
+				toggle
+					.setValue(this.plugin.settings.enterZenOnFullscreen)
+					.onChange(async (value: boolean) => {
+						this.plugin.settings.enterZenOnFullscreen = value;
+						await this.plugin.saveSettings();
+					}),
+			);
+
 
 		new Setting(containerEl)
 			.setName('macOS path additions')

@@ -64,6 +64,37 @@ export function isZenModeActive(app: App): boolean {
 }
 
 /**
+ * Enables Zen mode if not currently active by triggering the Zen plugin's toggle command
+ * (e.g. Maxymillion's 'zen:toggle' or 'obsidian-zen:toggle').
+ */
+export function enableZenMode(app: App): void {
+	if (isZenModeActive(app)) {
+		return;
+	}
+
+	const appWithInternals = app as AppWithInternals;
+	const commands = appWithInternals.commands?.commands;
+	if (commands) {
+		const zenCommandId = Object.keys(commands).find((id) => {
+			const cmd = commands[id];
+			const name = (cmd?.name || '').toLowerCase();
+			const idLower = id.toLowerCase();
+			return (
+				idLower.startsWith('zen:') ||
+				idLower.startsWith('obsidian-zen:') ||
+				idLower.startsWith('zen-mode:') ||
+				((idLower.includes('zen') || name.includes('zen')) &&
+					(name.includes('toggle') || idLower.includes('toggle') || name.includes('enter') || idLower.includes('enter') || name.includes('enable')))
+			);
+		});
+
+		if (zenCommandId && typeof appWithInternals.commands?.executeCommandById === 'function') {
+			appWithInternals.commands.executeCommandById(zenCommandId);
+		}
+	}
+}
+
+/**
  * Disables Zen mode if active by triggering the Zen plugin's toggle command
  * (e.g. Maxymillion's 'zen:toggle' or 'obsidian-zen:toggle').
  */
