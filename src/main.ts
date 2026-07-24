@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS, FolderNavigatorSettingTab, FolderNavigatorSettings } 
 import { FolderNavigatorModal } from './ui/folder-navigator-modal';
 
 import { disableZenAndToggleSidebars } from './commands/zen-sidebar';
+import { toggleFullscreen } from './commands/toggle-fullscreen';
 
 export default class FolderNavigatorPlugin extends Plugin {
 	settings!: FolderNavigatorSettings;
@@ -33,6 +34,14 @@ export default class FolderNavigatorPlugin extends Plugin {
 			name: 'Toggle sidebars',
 			callback: () => {
 				disableZenAndToggleSidebars(this.app);
+			},
+		});
+
+		this.addCommand({
+			id: 'toggle-fullscreen',
+			name: 'Toggle fullscreen',
+			callback: () => {
+				void toggleFullscreen(this.app, this.settings);
 			},
 		});
 
