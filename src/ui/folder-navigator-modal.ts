@@ -13,7 +13,7 @@ import {
 } from "obsidian";
 import { FolderNavigatorSettings, SortOrder } from "../settings";
 import { parseHotkey } from "../utils/hotkey-parser";
-import { openWithExternalProgram, revealInSystemExplorer } from "../utils/system";
+import { openWithExternalProgram, revealInObsidianExplorer, revealInSystemExplorer } from "../utils/system";
 
 // Augment Obsidian's internal type definitions directly
 declare module "obsidian" {
@@ -79,31 +79,18 @@ export class FolderNavigatorModal extends SuggestModal<TAbstractFile> {
     }
   }
 
+  private hasCustomHotkey(modifiers: Modifier[], key: string): boolean {
+    return this.activeCustomHotkeys.some((custom) => {
+      if (custom.hotkey.key.toLowerCase() !== key.toLowerCase()) return false;
+      const customMods = [...custom.hotkey.modifiers].sort();
+      const targetMods = [...modifiers].sort();
+      if (customMods.length !== targetMods.length) return false;
+      return customMods.every((mod, index) => mod === targetMods[index]);
+    });
+  }
+
   private registerKeybindings(): void {
-    // Parent folder (Mod + Up)
-    this.scope.register(["Mod"], "ArrowUp", (evt) => {
-      evt.preventDefault();
-      if (this.currentFolder.parent) {
-        this.navigateToFolder(this.currentFolder.parent, this.currentFolder);
-      }
-    });
-
-    // Reveal in system explorer (Mod + Shift + Down)
-    this.scope.register(["Mod", "Shift"], "ArrowDown", (evt) => {
-      evt.preventDefault();
-      const target = this.getHighlightedItem() ?? this.currentFolder;
-      if (target) {
-        revealInSystemExplorer(this.app, target);
-      }
-    });
-
-    // Open in new tab (Mod + Enter)
-    this.scope.register(["Mod"], "Enter", (evt) => {
-      evt.preventDefault();
-      this.openSelectedItem("tab");
-    });
-
-    // Register custom hotkey commands directly on Scope using Obsidian's Hotkey model
+    // Register custom hotkey commands first so they take precedence over default bindings
     for (const item of this.activeCustomHotkeys) {
       this.scope.register(item.hotkey.modifiers, item.hotkey.key, (evt) => {
         evt.preventDefault();
@@ -115,20 +102,65 @@ export class FolderNavigatorModal extends SuggestModal<TAbstractFile> {
       });
     }
 
+    const registerBuiltin = (modifiers: Modifier[], key: string, func: (evt: KeyboardEvent) => void) => {
+      if (!this.hasCustomHotkey(modifiers, key)) {
+        this.scope.register(modifiers, key, func);
+      }
+    };
+
+    // Parent folder (Mod + Up or Tab)
+    registerBuiltin(["Mod"], "ArrowUp", (evt) => {
+      evt.preventDefault();
+      if (this.currentFolder.parent) {
+        this.navigateToFolder(this.currentFolder.parent, this.currentFolder);
+      }
+    });
+
+    registerBuiltin([], "Tab", (evt) => {
+      evt.preventDefault();
+      if (this.currentFolder.parent) {
+        this.navigateToFolder(this.currentFolder.parent, this.currentFolder);
+      }
+    });
+
+    // Reveal in Obsidian folder navigation (Shift + Tab)
+    registerBuiltin(["Shift"], "Tab", (evt) => {
+      evt.preventDefault();
+      const target = this.getHighlightedItem() ?? this.currentFolder;
+      if (target) {
+        revealInObsidianExplorer(this.app, target);
+      }
+    });
+
+    // Reveal in system explorer (Mod + Shift + Down)
+    registerBuiltin(["Mod", "Shift"], "ArrowDown", (evt) => {
+      evt.preventDefault();
+      const target = this.getHighlightedItem() ?? this.currentFolder;
+      if (target) {
+        revealInSystemExplorer(this.app, target);
+      }
+    });
+
+    // Open in new tab (Mod + Enter)
+    registerBuiltin(["Mod"], "Enter", (evt) => {
+      evt.preventDefault();
+      this.openSelectedItem("tab");
+    });
+
     // Open in horizontal split (Mod + -)
-    this.scope.register(["Mod"], "-", (evt) => {
+    registerBuiltin(["Mod"], "-", (evt) => {
       evt.preventDefault();
       this.openSelectedItem("horizontal");
     });
 
     // Open in vertical split (Mod + I)
-    this.scope.register(["Mod"], "i", (evt) => {
+    registerBuiltin(["Mod"], "i", (evt) => {
       evt.preventDefault();
       this.openSelectedItem("vertical");
     });
 
     // Cycle sort mode (Mod + S)
-    this.scope.register(["Mod"], "s", (evt) => {
+    registerBuiltin(["Mod"], "s", (evt) => {
       evt.preventDefault();
       this.cycleSort();
     });
@@ -167,6 +199,7 @@ export class FolderNavigatorModal extends SuggestModal<TAbstractFile> {
       Return: "↵",
       Space: "␣",
       Backspace: "⌫",
+      Tab: "Tab",
     };
 
     const formattedKey = keyMap[hotkey.key] || (hotkey.key.length === 1 ? hotkey.key.toUpperCase() : hotkey.key);
@@ -176,16 +209,29 @@ export class FolderNavigatorModal extends SuggestModal<TAbstractFile> {
   private updateInstructions(): void {
     const printHk = (modifiers: Modifier[], key: string) => this.formatHotkey({ modifiers, key });
 
-    const instructions = [
+    const instructions: { command: string; purpose: string }[] = [
       { command: "↑↓", purpose: "Navigate" },
       { command: "↵", purpose: "Open" },
-      { command: printHk(["Mod"], "Enter"), purpose: "Open in new tab" },
-      { command: printHk(["Mod"], "-"), purpose: "Horizontal pane" },
-      { command: printHk(["Mod"], "i"), purpose: "Vertical pane" },
-      { command: printHk(["Mod"], "s"), purpose: `Cycle sort (${this.currentSort})` },
-      { command: printHk(["Mod"], "ArrowUp"), purpose: "Parent folder" },
-      { command: printHk(["Mod", "Shift"], "ArrowDown"), purpose: "Reveal in Finder" },
     ];
+
+    const defaultBindings: { modifiers: Modifier[]; key: string; purpose: string }[] = [
+      { modifiers: ["Mod"], key: "Enter", purpose: "Open in new tab" },
+      { modifiers: ["Mod"], key: "-", purpose: "Horizontal pane" },
+      { modifiers: ["Mod"], key: "i", purpose: "Vertical pane" },
+      { modifiers: ["Mod"], key: "s", purpose: `Cycle sort (${this.currentSort})` },
+      { modifiers: [], key: "Tab", purpose: "Parent folder" },
+      { modifiers: ["Shift"], key: "Tab", purpose: "Reveal in Obsidian" },
+      { modifiers: ["Mod", "Shift"], key: "ArrowDown", purpose: "Reveal in Finder" },
+    ];
+
+    for (const binding of defaultBindings) {
+      if (!this.hasCustomHotkey(binding.modifiers, binding.key)) {
+        instructions.push({
+          command: printHk(binding.modifiers, binding.key),
+          purpose: binding.purpose,
+        });
+      }
+    }
 
     for (const item of this.activeCustomHotkeys) {
       instructions.push({

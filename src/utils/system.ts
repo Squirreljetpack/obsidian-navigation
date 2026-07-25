@@ -1,4 +1,4 @@
-import { App, FileSystemAdapter, Notice, Platform, TAbstractFile } from 'obsidian';
+import { App, FileSystemAdapter, Notice, Platform, TAbstractFile, WorkspaceLeaf } from 'obsidian';
 import { FolderNavigatorSettings } from '../settings';
 
 /**
@@ -31,6 +31,33 @@ export function revealInSystemExplorer(app: App, file: TAbstractFile): void {
 	}
 
 	new Notice('Unable to reveal item in system explorer.');
+}
+
+/**
+ * Reveals a file or folder in Obsidian's internal File Explorer (folder navigation pane).
+ */
+export function revealInObsidianExplorer(app: App, file: TAbstractFile): void {
+	const leaves = app.workspace.getLeavesOfType('file-explorer');
+	const leaf = leaves[0];
+	if (leaf) {
+		const workspace = app.workspace as unknown as {
+			setActiveLeaf(leaf: WorkspaceLeaf, params?: { focus?: boolean }): void;
+			revealLeaf?: (leaf: WorkspaceLeaf) => Promise<void>;
+		};
+		if (typeof workspace.revealLeaf === 'function') {
+			void workspace.revealLeaf(leaf);
+		} else {
+			workspace.setActiveLeaf(leaf, { focus: true });
+		}
+
+		const view = leaf.view as { revealInFolder?: (file: TAbstractFile) => void };
+		if (typeof view.revealInFolder === 'function') {
+			view.revealInFolder(file);
+			return;
+		}
+	}
+
+	new Notice('Unable to reveal item in Obsidian folder navigation.');
 }
 
 /**
