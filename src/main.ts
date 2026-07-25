@@ -4,6 +4,7 @@ import { FolderNavigatorModal } from './ui/folder-navigator-modal';
 
 import { disableZenAndToggleSidebars } from './commands/zen-sidebar';
 import { toggleFullscreen } from './commands/toggle-fullscreen';
+import { closeRightSidebarViews } from './commands/close-right-sidebar-views';
 
 export default class FolderNavigatorPlugin extends Plugin {
 	settings!: FolderNavigatorSettings;
@@ -36,6 +37,14 @@ export default class FolderNavigatorPlugin extends Plugin {
 			name: 'Toggle fullscreen',
 			callback: () => {
 				void toggleFullscreen(this.app, this.settings);
+			},
+		});
+
+		this.addCommand({
+			id: 'close-right-sidebar-views',
+			name: 'Close all views in right sidebar',
+			callback: () => {
+				closeRightSidebarViews(this.app);
 			},
 		});
 
