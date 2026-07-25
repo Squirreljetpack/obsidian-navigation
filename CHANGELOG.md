@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.3.0
+
+- **Feature**: Bind `Tab` in navigator modal to go up to parent folder (same as `Mod + ↑`).
+- **Feature**: Bind `Shift + Tab` in navigator modal to reveal highlighted item or folder in Obsidian folder navigation (File Explorer).
+- **Feature**: Support custom hotkey overrides so user-configured hotkeys take precedence over built-in modal bindings.
+- **Feature**: Command to close all right sidebar views
+
+
 ## 1.2.0
 
 - **Feature**: Add `Toggle fullscreen` command to toggle Obsidian fullscreen mode while automatically collapsing/expanding sidebars.
