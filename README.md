@@ -13,6 +13,7 @@ Various navigation-related tools for Obsidian.
 - **Navigation Tools: Open navigator**: Open the quick switcher modal rooted in the active file's parent folder.
 - **Navigation Tools: Toggle sidebars**: Toggle workspace sidebars.
 - **Navigation Tools: Toggle fullscreen**: Toggle fullscreen mode and sidebar visibility.
+- **Navigation Tools: Close all views in right sidebar**: Command to close all right sidebar views
 
 ## Installation
 
