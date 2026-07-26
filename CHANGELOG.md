@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.4.0
+
+- **Feature**: Mouse wheel image zoom with configurable modifier key, step size, and initial size text box setting (default 300px).
+- **Feature**: Link searcher command palette tool to list and jump to links in the active note.
+- **Feature**: Close all views in right sidebar command.
+
 ## 1.3.0
 
 - **Feature**: Bind `Tab` in navigator modal to go up to parent folder (same as `Mod + ↑`).
