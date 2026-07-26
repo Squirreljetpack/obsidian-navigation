@@ -1,103 +1,112 @@
-import { App, FileSystemAdapter, Notice, Platform, TAbstractFile, WorkspaceLeaf } from 'obsidian';
-import { FolderNavigatorSettings } from '../settings';
+import { App, FileSystemAdapter, Notice, Platform, TAbstractFile, WorkspaceLeaf } from "obsidian";
+import { FolderNavigatorSettings } from "../settings.js";
+
+declare global {
+  interface Window {
+    require?: (module: string) => any;
+  }
+}
 
 /**
  * Reveals a file or folder in the system file explorer (Finder on macOS, File Explorer on Windows, etc.).
  * Uses Obsidian's internal cross-platform method `app.showInFolder` with a fallback to Electron's `shell.showItemInFolder`.
  */
 export function revealInSystemExplorer(app: App, file: TAbstractFile): void {
-	if (!Platform.isDesktop) {
-		new Notice('System explorer is only supported on desktop.');
-		return;
-	}
+  if (!Platform.isDesktop) {
+    new Notice("System explorer is only supported on desktop.");
+    return;
+  }
 
-	const appWithShow = app as unknown as { showInFolder?: (path: string) => void };
-	if (typeof appWithShow.showInFolder === 'function') {
-		appWithShow.showInFolder(file.path);
-		return;
-	}
+  const appWithShow = app as unknown as { showInFolder?: (path: string) => void };
+  if (typeof appWithShow.showInFolder === "function") {
+    appWithShow.showInFolder(file.path);
+    return;
+  }
 
-	if (app.vault.adapter instanceof FileSystemAdapter && typeof window !== 'undefined' && typeof window.require === 'function') {
-		const fullPath = app.vault.adapter.getFullPath(file.path);
-		try {
-			const electron = window.require('electron') as { shell?: { showItemInFolder?: (path: string) => void } };
-			if (electron.shell?.showItemInFolder) {
-				electron.shell.showItemInFolder(fullPath);
-				return;
-			}
-		} catch {
-			// Ignore electron require failure
-		}
-	}
+  if (
+    app.vault.adapter instanceof FileSystemAdapter && typeof window !== "undefined"
+    && typeof window.require === "function"
+  ) {
+    const fullPath = app.vault.adapter.getFullPath(file.path);
+    try {
+      const electron = window.require("electron") as { shell?: { showItemInFolder?: (path: string) => void } };
+      if (electron.shell?.showItemInFolder) {
+        electron.shell.showItemInFolder(fullPath);
+        return;
+      }
+    } catch {
+      // Ignore electron require failure
+    }
+  }
 
-	new Notice('Unable to reveal item in system explorer.');
+  new Notice("Unable to reveal item in system explorer.");
 }
 
 /**
  * Reveals a file or folder in Obsidian's internal File Explorer (folder navigation pane).
  */
 export function revealInObsidianExplorer(app: App, file: TAbstractFile): void {
-	const leaves = app.workspace.getLeavesOfType('file-explorer');
-	const leaf = leaves[0];
-	if (leaf) {
-		const workspace = app.workspace as unknown as {
-			setActiveLeaf(leaf: WorkspaceLeaf, params?: { focus?: boolean }): void;
-			revealLeaf?: (leaf: WorkspaceLeaf) => Promise<void>;
-		};
-		if (typeof workspace.revealLeaf === 'function') {
-			void workspace.revealLeaf(leaf);
-		} else {
-			workspace.setActiveLeaf(leaf, { focus: true });
-		}
+  const leaves = app.workspace.getLeavesOfType("file-explorer");
+  const leaf = leaves[0];
+  if (leaf) {
+    const workspace = app.workspace as unknown as {
+      setActiveLeaf(leaf: WorkspaceLeaf, params?: { focus?: boolean }): void;
+      revealLeaf?: (leaf: WorkspaceLeaf) => Promise<void>;
+    };
+    if (typeof workspace.revealLeaf === "function") {
+      void workspace.revealLeaf(leaf);
+    } else {
+      workspace.setActiveLeaf(leaf, { focus: true });
+    }
 
-		const view = leaf.view as { revealInFolder?: (file: TAbstractFile) => void };
-		if (typeof view.revealInFolder === 'function') {
-			view.revealInFolder(file);
-			return;
-		}
-	}
+    const view = leaf.view as { revealInFolder?: (file: TAbstractFile) => void };
+    if (typeof view.revealInFolder === "function") {
+      view.revealInFolder(file);
+      return;
+    }
+  }
 
-	new Notice('Unable to reveal item in Obsidian folder navigation.');
+  new Notice("Unable to reveal item in Obsidian folder navigation.");
 }
 
 /**
  * Retrieves the OS-specific PATH addition string from settings.
  */
 function getOsPathAdditions(settings: FolderNavigatorSettings): string {
-	if (Platform.isMacOS) {
-		return settings.macosPath || '';
-	}
-	if (Platform.isWin) {
-		return settings.windowsPath || '';
-	}
-	return settings.linuxPath || '';
+  if (Platform.isMacOS) {
+    return settings.macosPath || "";
+  }
+  if (Platform.isWin) {
+    return settings.windowsPath || "";
+  }
+  return settings.linuxPath || "";
 }
 
 /**
  * Builds the environment object with expanded PATH additions.
  */
 function buildExecEnvironment(settings: FolderNavigatorSettings): Record<string, string | undefined> {
-	const additions = getOsPathAdditions(settings).trim();
-	const winWithProc = window as unknown as { process?: { env?: Record<string, string | undefined> } };
-	const sysEnv = winWithProc.process?.env ?? {};
+  const additions = getOsPathAdditions(settings).trim();
+  const winWithProc = window as unknown as { process?: { env?: Record<string, string | undefined> } };
+  const sysEnv = winWithProc.process?.env ?? {};
 
-	if (!additions) {
-		return { ...sysEnv };
-	}
+  if (!additions) {
+    return { ...sysEnv };
+  }
 
-	const homeDir = sysEnv.HOME || sysEnv.USERPROFILE || '';
-	const expandedAdditions = additions.replace(/~/g, homeDir);
-	const pathDelimiter = Platform.isWin ? ';' : ':';
-	const existingPath = sysEnv.PATH || '';
+  const homeDir = sysEnv.HOME || sysEnv.USERPROFILE || "";
+  const expandedAdditions = additions.replace(/~/g, homeDir);
+  const pathDelimiter = Platform.isWin ? ";" : ":";
+  const existingPath = sysEnv.PATH || "";
 
-	const combinedPath = existingPath
-		? `${expandedAdditions}${pathDelimiter}${existingPath}`
-		: expandedAdditions;
+  const combinedPath = existingPath
+    ? `${expandedAdditions}${pathDelimiter}${existingPath}`
+    : expandedAdditions;
 
-	return {
-		...sysEnv,
-		PATH: combinedPath,
-	};
+  return {
+    ...sysEnv,
+    PATH: combinedPath,
+  };
 }
 
 /**
@@ -105,57 +114,57 @@ function buildExecEnvironment(settings: FolderNavigatorSettings): Record<string,
  * Supports `{}` template variable and OS-specific PATH additions.
  */
 export function openWithExternalProgram(
-	app: App,
-	file: TAbstractFile,
-	commandTemplate: string,
-	settings: FolderNavigatorSettings,
+  app: App,
+  file: TAbstractFile,
+  commandTemplate: string,
+  settings: FolderNavigatorSettings,
 ): void {
-	const command = commandTemplate.trim();
-	if (!command) {
-		return;
-	}
+  const command = commandTemplate.trim();
+  if (!command) {
+    return;
+  }
 
-	if (!Platform.isDesktop || !(app.vault.adapter instanceof FileSystemAdapter)) {
-		new Notice('External application launch is only supported on desktop file systems.');
-		return;
-	}
+  if (!Platform.isDesktop || !(app.vault.adapter instanceof FileSystemAdapter)) {
+    new Notice("External application launch is only supported on desktop file systems.");
+    return;
+  }
 
-	if (typeof window === 'undefined' || typeof window.require !== 'function') {
-		new Notice('Desktop runtime environment is missing.');
-		return;
-	}
+  if (typeof window === "undefined" || typeof window.require !== "function") {
+    new Notice("Desktop runtime environment is missing.");
+    return;
+  }
 
-	try {
-		const childProcess = window.require('child_process') as {
-			exec: (
-				cmd: string,
-				options: { env: Record<string, string | undefined> },
-				callback: (error: Error | null) => void,
-			) => void;
-		};
+  try {
+    const childProcess = window.require("child_process") as {
+      exec: (
+        cmd: string,
+        options: { env: Record<string, string | undefined> },
+        callback: (error: Error | null) => void,
+      ) => void;
+    };
 
-		const fullPath = app.vault.adapter.getFullPath(file.path);
-		const escapedPath = fullPath.replace(/"/g, '\\"');
+    const fullPath = app.vault.adapter.getFullPath(file.path);
+    const escapedPath = fullPath.replace(/"/g, "\\\"");
 
-		let finalCommand: string;
-		if (command.includes('{}')) {
-			finalCommand = command.replace(/{}/g, `"${escapedPath}"`);
-		} else if (command.includes('{file}')) {
-			finalCommand = command.replace(/{file}/g, `"${escapedPath}"`);
-		} else {
-			finalCommand = `${command} "${escapedPath}"`;
-		}
+    let finalCommand: string;
+    if (command.includes("{}")) {
+      finalCommand = command.replace(/{}/g, `"${escapedPath}"`);
+    } else if (command.includes("{file}")) {
+      finalCommand = command.replace(/{file}/g, `"${escapedPath}"`);
+    } else {
+      finalCommand = `${command} "${escapedPath}"`;
+    }
 
-		const env = buildExecEnvironment(settings);
+    const env = buildExecEnvironment(settings);
 
-		childProcess.exec(finalCommand, { env }, (error) => {
-			if (error) {
-				console.error(`Failed to open item with program command "${finalCommand}":`, error);
-				new Notice(`Failed to open with "${command}": ${error.message}`);
-			}
-		});
-	} catch (error) {
-		console.error('Failed to load child_process module:', error);
-		new Notice('Failed to execute external program.');
-	}
+    childProcess.exec(finalCommand, { env }, (error) => {
+      if (error) {
+        console.error(`Failed to open item with program command "${finalCommand}":`, error);
+        new Notice(`Failed to open with "${command}": ${error.message}`);
+      }
+    });
+  } catch (error) {
+    console.error("Failed to load child_process module:", error);
+    new Notice("Failed to execute external program.");
+  }
 }

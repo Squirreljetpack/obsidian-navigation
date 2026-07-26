@@ -1,17 +1,22 @@
 import { Plugin } from "obsidian";
-import { DEFAULT_SETTINGS, FolderNavigatorSettings, FolderNavigatorSettingTab } from "./settings";
-import { FolderNavigatorModal } from "./ui/folder-navigator-modal";
+import { DEFAULT_SETTINGS, FolderNavigatorSettings, FolderNavigatorSettingTab } from "./settings.js";
+import { FolderNavigatorModal } from "./ui/folder-navigator-modal.js";
 
-import { closeRightSidebarViews } from "./commands/close-right-sidebar-views";
-import { linkSearcher } from "./commands/show-links";
-import { toggleFullscreen } from "./commands/toggle-fullscreen";
-import { disableZenAndToggleSidebars } from "./commands/zen-sidebar";
+import { closeRightSidebarViews } from "./commands/close-right-sidebar-views.js";
+import { linkSearcher } from "./commands/show-links.js";
+import { toggleFullscreen } from "./commands/toggle-fullscreen.js";
+import { disableZenAndToggleSidebars } from "./commands/zen-sidebar.js";
+import { MouseWheelZoomManager } from "./utils/mousewheel-zoom.js";
 
 export default class FolderNavigatorPlugin extends Plugin {
   settings!: FolderNavigatorSettings;
+  private mouseWheelZoomManager!: MouseWheelZoomManager;
 
   async onload() {
     await this.loadSettings();
+
+    this.mouseWheelZoomManager = new MouseWheelZoomManager(this, () => this.settings);
+    this.mouseWheelZoomManager.setup();
 
     // Register the command that appears in the standard Obsidian Command Palette
     const openModal = () => {
@@ -58,6 +63,10 @@ export default class FolderNavigatorPlugin extends Plugin {
     });
 
     this.addSettingTab(new FolderNavigatorSettingTab(this.app, this));
+  }
+
+  onunload() {
+    this.mouseWheelZoomManager?.onunload();
   }
 
   async loadSettings() {

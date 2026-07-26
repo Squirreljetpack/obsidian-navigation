@@ -11,9 +11,9 @@ import {
   TFolder,
   WorkspaceLeaf,
 } from "obsidian";
-import { FolderNavigatorSettings, SortOrder } from "../settings";
-import { parseHotkey } from "../utils/hotkey-parser";
-import { openWithExternalProgram, revealInObsidianExplorer, revealInSystemExplorer } from "../utils/system";
+import { FolderNavigatorSettings, SortOrder } from "../settings.js";
+import { parseHotkey } from "../utils/hotkey-parser.js";
+import { openWithExternalProgram, revealInObsidianExplorer, revealInSystemExplorer } from "../utils/system.js";
 
 // Augment Obsidian's internal type definitions directly
 declare module "obsidian" {

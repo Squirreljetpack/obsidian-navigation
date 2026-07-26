@@ -1,5 +1,5 @@
 import { App, EditorPosition, EditorSelectionOrCaret, Keymap, MarkdownView, Platform, SuggestModal } from "obsidian";
-import { LinkItem, extractLinksFromView, parseLinksFromText } from "../utils/link-parser";
+import { LinkItem, extractLinksFromView, parseLinksFromText } from "../utils/link-parser.js";
 
 export type { LinkItem };
 export { extractLinksFromView, parseLinksFromText };

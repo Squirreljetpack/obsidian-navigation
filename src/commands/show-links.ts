@@ -1,5 +1,5 @@
 import { App, MarkdownView, Notice } from "obsidian";
-import { extractLinksFromView, LinksModal } from "../ui/links-modal";
+import { extractLinksFromView, LinksModal } from "../ui/links-modal.js";
 
 /**
  * Command implementation for "Link searcher".
