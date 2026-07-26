@@ -19,3 +19,73 @@
 	width: 16px;
 	height: 16px;
 }
+
+/* Link Modal Styles */
+
+.link-modal-item {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+}
+
+.link-modal-content {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	width: 100%;
+	overflow: hidden;
+}
+
+.link-modal-text {
+	font-weight: 500;
+	color: var(--text-normal);
+	white-space: nowrap;
+}
+
+.link-modal-arrow {
+	color: var(--text-muted);
+	font-weight: bold;
+	white-space: nowrap;
+}
+
+.link-modal-target {
+	color: var(--text-muted);
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	flex: 1 1 auto;
+	min-width: 0;
+}
+
+.link-modal-badge {
+	font-size: 0.75em;
+	padding: 1px 5px;
+	border-radius: 4px;
+	background-color: var(--background-modifier-border);
+	color: var(--text-accent);
+	white-space: nowrap;
+	flex-shrink: 0;
+	margin-left: auto;
+}
+
+.link-modal-line-number {
+	font-size: 0.85em;
+	color: var(--text-muted);
+	font-family: var(--font-monospace);
+	white-space: nowrap;
+	flex-shrink: 0;
+	margin-left: auto;
+	text-align: right;
+}
+
+.link-modal-badge + .link-modal-line-number {
+	margin-left: 8px;
+}
+
+.link-jump-highlight {
+	outline: 2px solid var(--interactive-accent) !important;
+	border-radius: 4px;
+	transition: outline 0.3s ease-in-out;
+}
+

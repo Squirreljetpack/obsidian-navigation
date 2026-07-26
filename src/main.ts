@@ -1,64 +1,73 @@
-import { Plugin } from 'obsidian';
-import { DEFAULT_SETTINGS, FolderNavigatorSettingTab, FolderNavigatorSettings } from './settings';
-import { FolderNavigatorModal } from './ui/folder-navigator-modal';
+import { Plugin } from "obsidian";
+import { DEFAULT_SETTINGS, FolderNavigatorSettings, FolderNavigatorSettingTab } from "./settings";
+import { FolderNavigatorModal } from "./ui/folder-navigator-modal";
 
-import { disableZenAndToggleSidebars } from './commands/zen-sidebar';
-import { toggleFullscreen } from './commands/toggle-fullscreen';
-import { closeRightSidebarViews } from './commands/close-right-sidebar-views';
+import { closeRightSidebarViews } from "./commands/close-right-sidebar-views";
+import { linkSearcher } from "./commands/show-links";
+import { toggleFullscreen } from "./commands/toggle-fullscreen";
+import { disableZenAndToggleSidebars } from "./commands/zen-sidebar";
 
 export default class FolderNavigatorPlugin extends Plugin {
-	settings!: FolderNavigatorSettings;
+  settings!: FolderNavigatorSettings;
 
-	async onload() {
-		await this.loadSettings();
+  async onload() {
+    await this.loadSettings();
 
-		// Register the command that appears in the standard Obsidian Command Palette
-		const openModal = () => {
-			const initialItem = this.app.workspace.getActiveFile() ?? this.app.vault.getRoot();
-			new FolderNavigatorModal(this.app, this.settings, initialItem).open();
-		};
+    // Register the command that appears in the standard Obsidian Command Palette
+    const openModal = () => {
+      const initialItem = this.app.workspace.getActiveFile() ?? this.app.vault.getRoot();
+      new FolderNavigatorModal(this.app, this.settings, initialItem).open();
+    };
 
-		this.addCommand({
-			id: 'open-navigator',
-			name: 'Open navigator',
-			callback: openModal,
-		});
+    this.addCommand({
+      id: "open-navigator",
+      name: "Open navigator",
+      callback: openModal,
+    });
 
-		this.addCommand({
-			id: 'toggle-sidebars',
-			name: 'Toggle sidebars',
-			callback: () => {
-				disableZenAndToggleSidebars(this.app);
-			},
-		});
+    this.addCommand({
+      id: "link-searcher",
+      name: "Link searcher",
+      callback: () => {
+        linkSearcher(this.app);
+      },
+    });
 
-		this.addCommand({
-			id: 'toggle-fullscreen',
-			name: 'Toggle fullscreen',
-			callback: () => {
-				void toggleFullscreen(this.app, this.settings);
-			},
-		});
+    this.addCommand({
+      id: "toggle-sidebars",
+      name: "Toggle sidebars",
+      callback: () => {
+        disableZenAndToggleSidebars(this.app);
+      },
+    });
 
-		this.addCommand({
-			id: 'close-right-sidebar-views',
-			name: 'Close all views in right sidebar',
-			callback: () => {
-				closeRightSidebarViews(this.app);
-			},
-		});
+    this.addCommand({
+      id: "toggle-fullscreen",
+      name: "Toggle fullscreen",
+      callback: () => {
+        void toggleFullscreen(this.app, this.settings);
+      },
+    });
 
-		this.addSettingTab(new FolderNavigatorSettingTab(this.app, this));
-	}
+    this.addCommand({
+      id: "close-right-sidebar-views",
+      name: "Close all views in right sidebar",
+      callback: () => {
+        closeRightSidebarViews(this.app);
+      },
+    });
 
-	async loadSettings() {
-		this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<FolderNavigatorSettings>);
-		if (!this.settings.customCommands) {
-			this.settings.customCommands = [];
-		}
-	}
+    this.addSettingTab(new FolderNavigatorSettingTab(this.app, this));
+  }
 
-	async saveSettings() {
-		await this.saveData(this.settings);
-	}
+  async loadSettings() {
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<FolderNavigatorSettings>);
+    if (!this.settings.customCommands) {
+      this.settings.customCommands = [];
+    }
+  }
+
+  async saveSettings() {
+    await this.saveData(this.settings);
+  }
 }
