@@ -2,30 +2,9 @@ import { App } from "obsidian";
 import { FolderNavigatorSettings } from "../settings.js";
 import { disableZenMode, enableZenMode, isZenModeActive } from "./zen-sidebar.js";
 
-interface CommandRegistry {
-  executeCommandById?: (id: string) => boolean;
-}
-
-interface AppWithInternals extends App {
-  commands?: CommandRegistry;
-}
-
 interface ElectronWindow {
   isFullScreen: () => boolean;
   setFullScreen: (flag: boolean) => void;
-}
-
-interface ElectronRemote {
-  getCurrentWindow?: () => ElectronWindow;
-}
-
-interface ElectronModule {
-  remote?: ElectronRemote;
-}
-
-interface WindowWithElectron {
-  electronWindow?: ElectronWindow;
-  require?: (module: string) => unknown;
 }
 
 declare const activeWindow: Window | undefined;
@@ -35,16 +14,20 @@ declare const activeWindow: Window | undefined;
  */
 function getElectronWindow(): ElectronWindow | null {
   try {
-    const currentWin = typeof activeWindow !== "undefined" ? activeWindow : window;
-    const win = currentWin as unknown as WindowWithElectron;
-    if (win.electronWindow) {
-      return win.electronWindow;
+    const currentWin = (activeWindow ?? window) as typeof window & {
+      electronWindow?: ElectronWindow;
+      require?: (module: string) => {
+        remote?: { getCurrentWindow?: () => ElectronWindow };
+      };
+    };
+
+    if (currentWin.electronWindow) {
+      return currentWin.electronWindow;
     }
 
-    const req = win.require;
-    if (typeof req === "function") {
+    if (currentWin.require) {
       try {
-        const electron = req("electron") as ElectronModule | undefined;
+        const electron = currentWin.require("electron") as { remote?: { getCurrentWindow?: () => ElectronWindow } };
         if (electron?.remote?.getCurrentWindow) {
           return electron.remote.getCurrentWindow();
         }
@@ -52,7 +35,7 @@ function getElectronWindow(): ElectronWindow | null {
         // ignore
       }
       try {
-        const remote = req("@electron/remote") as ElectronRemote | undefined;
+        const remote = currentWin.require("@electron/remote") as { getCurrentWindow?: () => ElectronWindow };
         if (remote?.getCurrentWindow) {
           return remote.getCurrentWindow();
         }
@@ -71,24 +54,16 @@ function getElectronWindow(): ElectronWindow | null {
  */
 export function isFullscreen(): boolean {
   const electronWin = getElectronWindow();
-  if (electronWin && typeof electronWin.isFullScreen === "function") {
-    return electronWin.isFullScreen();
-  }
-
-  const doc = document as Document & {
-    webkitFullscreenElement?: Element;
-    mozFullScreenElement?: Element;
-    msFullscreenElement?: Element;
-  };
-
-  if (doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement) {
+  if (electronWin?.isFullScreen?.()) {
     return true;
   }
 
-  if (typeof window !== "undefined" && typeof screen !== "undefined") {
-    if (window.outerWidth === screen.width && window.outerHeight === screen.height) {
-      return true;
-    }
+  if (document.fullscreenElement) {
+    return true;
+  }
+
+  if (window.outerWidth === screen.width && window.outerHeight === screen.height) {
+    return true;
   }
 
   return false;
@@ -127,7 +102,7 @@ export async function enterFullscreen(app: App): Promise<void> {
   }
 
   const electronWin = getElectronWindow();
-  if (electronWin && typeof electronWin.setFullScreen === "function") {
+  if (electronWin?.setFullScreen) {
     try {
       electronWin.setFullScreen(true);
       return;
@@ -136,25 +111,10 @@ export async function enterFullscreen(app: App): Promise<void> {
     }
   }
 
-  const docEl = document.documentElement as HTMLElement & {
-    webkitRequestFullscreen?: () => Promise<void>;
-    mozRequestFullScreen?: () => Promise<void>;
-    msRequestFullscreen?: () => Promise<void>;
-  };
-
   let succeeded = false;
   try {
-    if (docEl.requestFullscreen) {
-      await docEl.requestFullscreen();
-      succeeded = true;
-    } else if (docEl.webkitRequestFullscreen) {
-      await docEl.webkitRequestFullscreen();
-      succeeded = true;
-    } else if (docEl.mozRequestFullScreen) {
-      await docEl.mozRequestFullScreen();
-      succeeded = true;
-    } else if (docEl.msRequestFullscreen) {
-      await docEl.msRequestFullscreen();
+    if (document.documentElement.requestFullscreen) {
+      await document.documentElement.requestFullscreen();
       succeeded = true;
     }
   } catch {
@@ -162,10 +122,7 @@ export async function enterFullscreen(app: App): Promise<void> {
   }
 
   if (!succeeded) {
-    const appWithInternals = app as AppWithInternals;
-    if (typeof appWithInternals.commands?.executeCommandById === "function") {
-      appWithInternals.commands.executeCommandById("app:toggle-fullscreen");
-    }
+    app.commands?.executeCommandById?.("app:toggle-fullscreen");
   }
 }
 
@@ -178,7 +135,7 @@ export async function exitFullscreen(app: App): Promise<void> {
   }
 
   const electronWin = getElectronWindow();
-  if (electronWin && typeof electronWin.setFullScreen === "function" && electronWin.isFullScreen()) {
+  if (electronWin?.setFullScreen && electronWin.isFullScreen()) {
     try {
       electronWin.setFullScreen(false);
       return;
@@ -187,25 +144,10 @@ export async function exitFullscreen(app: App): Promise<void> {
     }
   }
 
-  const doc = document as Document & {
-    webkitFullscreenElement?: Element;
-    mozFullScreenElement?: Element;
-    msFullscreenElement?: Element;
-    webkitExitFullscreen?: () => Promise<void>;
-    mozCancelFullScreen?: () => Promise<void>;
-    msExitFullscreen?: () => Promise<void>;
-  };
-
-  if (doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement) {
+  if (document.fullscreenElement) {
     try {
-      if (doc.exitFullscreen) {
-        await doc.exitFullscreen();
-      } else if (doc.webkitExitFullscreen) {
-        await doc.webkitExitFullscreen();
-      } else if (doc.mozCancelFullScreen) {
-        await doc.mozCancelFullScreen();
-      } else if (doc.msExitFullscreen) {
-        await doc.msExitFullscreen();
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
       }
       return;
     } catch {
@@ -213,10 +155,7 @@ export async function exitFullscreen(app: App): Promise<void> {
     }
   }
 
-  const appWithInternals = app as AppWithInternals;
-  if (typeof appWithInternals.commands?.executeCommandById === "function") {
-    appWithInternals.commands.executeCommandById("app:toggle-fullscreen");
-  }
+  app.commands?.executeCommandById?.("app:toggle-fullscreen");
 }
 
 /**

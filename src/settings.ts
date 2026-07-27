@@ -66,7 +66,7 @@ export class FolderNavigatorSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("Enter zen mode on fullscreen")
-      .setDesc("Enable Maxymillion/zen mode upon entering fullscreen mode.")
+      .setDesc("Enable zen mode upon entering fullscreen mode.")
       .addToggle((toggle) =>
         toggle
           .setValue(this.plugin.settings.enterZenOnFullscreen)

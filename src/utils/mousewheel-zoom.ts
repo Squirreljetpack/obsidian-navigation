@@ -46,12 +46,6 @@ export class MouseWheelZoomManager {
     this.clearAllPendingSaves();
   }
 
-  /** Kept as a harmless no-op for backwards compatibility with existing callers (e.g. settings tab). */
-  public onConfigKeyUp(_currentWindow: Window) {
-    // No persistent key-held state to reset anymore - the wheel handler
-    // reads modifier state directly off each WheelEvent.
-  }
-
   private registerEvents(currentWindow: Window) {
     const doc = currentWindow.document;
 

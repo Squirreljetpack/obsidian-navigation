@@ -1,13 +1,5 @@
 import { Hotkey, Modifier } from "obsidian";
 
-declare module "obsidian" {
-  interface HotkeyManager {
-    printHotkey(hotkey: Hotkey): string;
-  }
-  interface App {
-    hotkeyManager?: HotkeyManager;
-  }
-}
 
 /**
  * Parses a string representation like "Mod+Shift+ArrowDown" into Obsidian's native `Hotkey` interface (`{ modifiers, key }`).

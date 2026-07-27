@@ -3,7 +3,7 @@ import { FolderNavigatorSettings } from "../settings.js";
 
 declare global {
   interface Window {
-    require?: (module: string) => any;
+    require?: (module: string) => unknown;
   }
 }
 
@@ -17,16 +17,12 @@ export function revealInSystemExplorer(app: App, file: TAbstractFile): void {
     return;
   }
 
-  const appWithShow = app as unknown as { showInFolder?: (path: string) => void };
-  if (typeof appWithShow.showInFolder === "function") {
-    appWithShow.showInFolder(file.path);
+  if (app.showInFolder) {
+    app.showInFolder(file.path);
     return;
   }
 
-  if (
-    app.vault.adapter instanceof FileSystemAdapter && typeof window !== "undefined"
-    && typeof window.require === "function"
-  ) {
+  if (app.vault.adapter instanceof FileSystemAdapter && window.require) {
     const fullPath = app.vault.adapter.getFullPath(file.path);
     try {
       const electron = window.require("electron") as { shell?: { showItemInFolder?: (path: string) => void } };
@@ -53,15 +49,14 @@ export function revealInObsidianExplorer(app: App, file: TAbstractFile): void {
       setActiveLeaf(leaf: WorkspaceLeaf, params?: { focus?: boolean }): void;
       revealLeaf?: (leaf: WorkspaceLeaf) => Promise<void>;
     };
-    if (typeof workspace.revealLeaf === "function") {
+    if (workspace.revealLeaf) {
       void workspace.revealLeaf(leaf);
     } else {
       workspace.setActiveLeaf(leaf, { focus: true });
     }
 
-    const view = leaf.view as { revealInFolder?: (file: TAbstractFile) => void };
-    if (typeof view.revealInFolder === "function") {
-      view.revealInFolder(file);
+    if (leaf.view.revealInFolder) {
+      leaf.view.revealInFolder(file);
       return;
     }
   }
@@ -129,7 +124,7 @@ export function openWithExternalProgram(
     return;
   }
 
-  if (typeof window === "undefined" || typeof window.require !== "function") {
+  if (!window.require) {
     new Notice("Desktop runtime environment is missing.");
     return;
   }

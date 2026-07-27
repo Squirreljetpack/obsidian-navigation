@@ -7,25 +7,9 @@ export enum ModifierKey {
 	SHIFT_RIGHT = 'ShiftRight',
 }
 
-export class ReplaceTerm {
+export interface ReplaceTerm {
 	replaceFrom: (oldSize: number) => string;
 	replaceWith: (newSize: number) => string;
-
-	constructor(
-		replaceFrom: (oldSize: number) => string,
-		replaceWith: (newSize: number) => string,
-	) {
-		this.replaceFrom = replaceFrom;
-		this.replaceWith = replaceWith;
-	}
-
-	public getReplaceFromString(oldSize: number): string {
-		return this.replaceFrom(oldSize);
-	}
-
-	public getReplaceWithString(newSize: number): string {
-		return this.replaceWith(newSize);
-	}
 }
 
 export interface HandleZoomParams {
@@ -131,14 +115,14 @@ export class ImageZoomUtil {
 		const fragmentRegex = new RegExp(`${escapeRegex(imageName)}#width=(\\d+)`);
 		return {
 			sizeMatchRegExp: fragmentRegex,
-			replaceSizeExist: new ReplaceTerm(
-				(oldSize) => `${imageName}#width=${oldSize}`,
-				(newSize) => `${imageName}#width=${newSize}`,
-			),
-			replaceSizeNotExist: new ReplaceTerm(
-				() => `(${imageName})`,
-				(newSize) => `(${imageName}#width=${newSize})`,
-			),
+			replaceSizeExist: {
+				replaceFrom: (oldSize) => `${imageName}#width=${oldSize}`,
+				replaceWith: (newSize) => `${imageName}#width=${newSize}`,
+			},
+			replaceSizeNotExist: {
+				replaceFrom: () => `(${imageName})`,
+				replaceWith: (newSize) => `(${imageName}#width=${newSize})`,
+			},
 		};
 	}
 
@@ -157,8 +141,8 @@ export class ImageZoomUtil {
 
 		return {
 			sizeMatchRegExp,
-			replaceSizeExist: new ReplaceTerm(replaceSizeExistFrom, replaceSizeExistWith),
-			replaceSizeNotExist: new ReplaceTerm(replaceSizeNotExistsFrom, replaceSizeNotExistsWith),
+			replaceSizeExist: { replaceFrom: replaceSizeExistFrom, replaceWith: replaceSizeExistWith },
+			replaceSizeNotExist: { replaceFrom: replaceSizeNotExistsFrom, replaceWith: replaceSizeNotExistsWith },
 		};
 	}
 }

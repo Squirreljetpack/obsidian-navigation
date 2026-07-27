@@ -1,14 +1,10 @@
 import { App, WorkspaceLeaf } from 'obsidian';
 
-interface WorkspaceWithInternals {
-	rightSplit?: unknown;
-}
-
 /**
  * Closes (detaches) all leaves/views currently located in the right sidebar.
  */
 export function closeRightSidebarViews(app: App): void {
-	const rightSplit = (app.workspace as WorkspaceWithInternals).rightSplit;
+	const rightSplit = app.workspace.rightSplit;
 	if (!rightSplit) {
 		return;
 	}
@@ -16,7 +12,7 @@ export function closeRightSidebarViews(app: App): void {
 	const leavesToClose: WorkspaceLeaf[] = [];
 
 	app.workspace.iterateAllLeaves((leaf: WorkspaceLeaf) => {
-		if (typeof leaf.getRoot === 'function' && leaf.getRoot() === rightSplit) {
+		if (leaf.getRoot() === rightSplit) {
 			leavesToClose.push(leaf);
 		}
 	});

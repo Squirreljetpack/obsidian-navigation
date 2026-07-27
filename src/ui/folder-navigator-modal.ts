@@ -15,17 +15,7 @@ import { FolderNavigatorSettings, SortOrder } from "../settings.js";
 import { parseHotkey } from "../utils/hotkey-parser.js";
 import { openWithExternalProgram, revealInObsidianExplorer, revealInSystemExplorer } from "../utils/system.js";
 
-// Augment Obsidian's internal type definitions directly
-declare module "obsidian" {
-  interface SuggestModal<T> {
-    chooser?: {
-      values?: T[];
-      selectedItem: number;
-      setSelectedItem(index: number, evt?: MouseEvent | KeyboardEvent): void;
-      updateSuggestions?(): void;
-    };
-  }
-}
+
 
 interface ActiveCustomHotkey {
   hotkey: Hotkey;
@@ -282,7 +272,7 @@ export class FolderNavigatorModal extends SuggestModal<TAbstractFile> {
   }
 
   private getHighlightedItem(): TAbstractFile | null {
-    if (this.chooser?.values && typeof this.chooser.selectedItem === "number") {
+    if (this.chooser?.values && this.chooser.selectedItem !== undefined) {
       return this.chooser.values[this.chooser.selectedItem] ?? null;
     }
     return null;

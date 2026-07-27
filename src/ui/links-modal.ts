@@ -4,16 +4,7 @@ import { LinkItem, extractLinksFromView, parseLinksFromText } from "../utils/lin
 export type { LinkItem };
 export { extractLinksFromView, parseLinksFromText };
 
-declare module "obsidian" {
-  interface SuggestModal<T> {
-    chooser?: {
-      values?: T[];
-      selectedItem: number;
-      setSelectedItem(index: number, evt?: MouseEvent | KeyboardEvent): void;
-      updateSuggestions?(): void;
-    };
-  }
-}
+
 
 export class LinksModal extends SuggestModal<LinkItem> {
   private view: MarkdownView;
@@ -103,7 +94,7 @@ export class LinksModal extends SuggestModal<LinkItem> {
         this.originalSelections = editor.listSelections();
       }
     } else if (mode === "preview") {
-      const previewMode = view.previewMode as unknown as { containerEl?: HTMLElement };
+      const previewMode = view.previewMode;
       if (previewMode?.containerEl) {
         this.originalPreviewScrollTop = previewMode.containerEl.scrollTop;
         this.originalPreviewScrollLeft = previewMode.containerEl.scrollLeft;
@@ -128,7 +119,7 @@ export class LinksModal extends SuggestModal<LinkItem> {
         }
       }
     } else if (mode === "preview") {
-      const previewMode = view.previewMode as unknown as { containerEl?: HTMLElement };
+      const previewMode = view.previewMode;
       if (previewMode?.containerEl) {
         if (this.originalPreviewScrollTop !== null) {
           previewMode.containerEl.scrollTop = this.originalPreviewScrollTop;
@@ -230,12 +221,10 @@ export class LinksModal extends SuggestModal<LinkItem> {
       editor.setSelection(start, end);
       editor.scrollIntoView({ from: start, to: end }, true);
     } else if (mode === "preview") {
-      const previewMode = view.previewMode as unknown as { applyScroll?: (line: number) => void; containerEl?: HTMLElement };
-      if (typeof previewMode.applyScroll === "function") {
-        previewMode.applyScroll(item.position.start.line);
-      }
+      const previewMode = view.previewMode;
+      previewMode?.applyScroll?.(item.position.start.line);
 
-      const container = previewMode.containerEl;
+      const container = previewMode?.containerEl;
       if (container) {
         const matchedEl = this.findPreviewElement(container, item);
 
@@ -310,7 +299,7 @@ export class LinksModal extends SuggestModal<LinkItem> {
   }
 
   private getHighlightedItem(): LinkItem | null {
-    if (this.chooser?.values && typeof this.chooser.selectedItem === "number") {
+    if (this.chooser?.values && this.chooser.selectedItem !== undefined) {
       return this.chooser.values[this.chooser.selectedItem] ?? null;
     }
     return null;
@@ -375,12 +364,10 @@ export class LinksModal extends SuggestModal<LinkItem> {
       editor.scrollIntoView({ from: start, to: end }, true);
       editor.focus();
     } else if (mode === "preview") {
-      const previewMode = view.previewMode as unknown as { applyScroll?: (line: number) => void; containerEl?: HTMLElement };
-      if (typeof previewMode.applyScroll === "function") {
-        previewMode.applyScroll(item.position.start.line);
-      }
+      const previewMode = view.previewMode;
+      previewMode?.applyScroll?.(item.position.start.line);
 
-      const container = previewMode.containerEl;
+      const container = previewMode?.containerEl;
       if (container) {
         const matchedEl = this.findPreviewElement(container, item);
 
