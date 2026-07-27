@@ -1,4 +1,4 @@
-import { App, MarkdownView, Plugin, TFile, WorkspaceWindow } from "obsidian";
+import { type App, MarkdownView, type Plugin, type TFile, type WorkspaceWindow } from "obsidian";
 import { ImageZoomUtil, ModifierKey } from "./image-zoom-util.js";
 
 export interface MouseWheelZoomSettingsProvider {
@@ -27,7 +27,10 @@ export class MouseWheelZoomManager {
   private getSettings: () => MouseWheelZoomSettingsProvider;
   private pendingSaves = new Map<Element, number>();
 
-  constructor(plugin: Plugin, getSettings: () => MouseWheelZoomSettingsProvider) {
+  constructor(
+    plugin: Plugin,
+    getSettings: () => MouseWheelZoomSettingsProvider,
+  ) {
     this.plugin = plugin;
     this.app = plugin.app;
     this.getSettings = getSettings;
@@ -94,8 +97,13 @@ export class MouseWheelZoomManager {
     let newWidth = currentWidth;
     if (evt.deltaY < 0) {
       newWidth = Math.round(currentWidth + settings.mouseWheelZoomStepSize);
-    } else if (evt.deltaY > 0 && currentWidth > settings.mouseWheelZoomStepSize) {
-      newWidth = Math.round(Math.max(20, currentWidth - settings.mouseWheelZoomStepSize));
+    } else if (
+      evt.deltaY > 0
+      && currentWidth > settings.mouseWheelZoomStepSize
+    ) {
+      newWidth = Math.round(
+        Math.max(20, currentWidth - settings.mouseWheelZoomStepSize),
+      );
     }
 
     // Instant visual feedback while scrolling. Obsidian will take over
@@ -129,7 +137,9 @@ export class MouseWheelZoomManager {
     const file = this.getActivePaneWithImage(img);
     if (!file) return;
 
-    const rawImageName = ImageZoomUtil.getLocalImageNameFromUri(img.getAttribute("src") ?? "");
+    const rawImageName = ImageZoomUtil.getLocalImageNameFromUri(
+      img.getAttribute("src") ?? "",
+    );
     if (!rawImageName) return;
 
     let imageName = rawImageName;
@@ -139,34 +149,141 @@ export class MouseWheelZoomManager {
       // ignore
     }
 
-    // Disambiguate which occurrence in the note this DOM image corresponds
-    // to, for notes that embed the same image multiple times: find this
-    // img's position among same-named images in its pane (DOM order), and
-    // later rewrite the occurrence at that same position in the source text.
-    const ordinal = this.getImageOrdinal(img, rawImageName);
-
-    await this.app.vault.process(file, (text) => this.setImageWidthInText(text, imageName, width, ordinal));
-  }
-
-  private getImageOrdinal(img: HTMLImageElement, rawImageName: string): number {
-    const container = img.closest<HTMLElement>(".markdown-rendered, .markdown-source-view, .cm-content")
-      ?? img.ownerDocument.body;
-
-    const sameNameImages = Array.from(container.querySelectorAll("img")).filter(
-      (candidate) => ImageZoomUtil.getLocalImageNameFromUri(candidate.getAttribute("src") ?? "") === rawImageName,
-    );
-
-    return sameNameImages.indexOf(img);
+    await this.app.vault.process(file, (text) => {
+      const ordinal = this.getImageOrdinal(img, rawImageName, text);
+      return this.setImageWidthInText(text, imageName, width, ordinal);
+    });
   }
 
   /**
-   * Rewrites the width for the image reference at `ordinal` (0-based, in
-   * document order) among all references to imageName - supporting both
-   * standard markdown links `![alt|width](target)` and Obsidian wiki-style
+   * Use renderer.sections (from the active MarkdownView's previewMode)
+   * to find the source line at which the target DOM section starts,
+   * then find the regex occurrence for this image whose byte offset
+   * in the source text corresponds to that line.
+   *
+   * This avoids ordinal counting (DOM position ≠ text position when
+   * split panes create duplicate DOM nodes for the same occurrence).
+   */
+  private getImageOrdinal(
+    img: HTMLImageElement,
+    rawImageName: string,
+    text: string,
+  ): number {
+    const targetLine = this.getSectionLine(img);
+    if (targetLine !== null) {
+      return this.occurrenceIndexForLine(text, rawImageName, targetLine);
+    }
+
+    // Renderer sections unavailable (e.g. not in a MarkdownView
+    // preview). Fall back to 0 and the caller's disambiguation
+    // logic will pick the first occurrence — a safe default
+    // since the user is always scrolling ON a specific image.
+    return 0;
+  }
+
+  /**
+   * Return the source line covered by the preview section
+   * that contains `target`, using Obsidian's internal
+   * renderer.sections structure (matches the approach used
+   * in the user's other plugin).
+   */
+  private getSectionLine(target: HTMLElement): number | null {
+    const leaves = this.app.workspace.getLeavesOfType("markdown");
+    for (const leaf of leaves) {
+      if (
+        leaf.view instanceof MarkdownView
+        && leaf.view.containerEl.contains(target)
+      ) {
+        const preview = leaf.view.previewMode;
+        const sections = preview?.renderer?.sections;
+        if (!Array.isArray(sections)) continue;
+        for (const section of sections) {
+          if (section?.el?.contains(target)) {
+            return (
+              section.start?.line ?? section.lineStart ?? section.line ?? null
+            );
+          }
+        }
+        break; // image belongs to one leaf only
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Find the index of the regex match (for this image in `text`)
+   * whose source position sits on or just before `targetLine`.
+   * This gives a reliable mapping from source position to
+   * occurrence index without relying on DOM image counts.
+   */
+  private occurrenceIndexForLine(
+    text: string,
+    imageName: string,
+    targetLine: number,
+  ): number {
+    const mdRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+    let match: RegExpExecArray | null;
+    let bestIndex = 0;
+    let bestLine = -1;
+    let i = 0;
+
+    while ((match = mdRegex.exec(text)) !== null) {
+      const urlPath = match[2] ?? "";
+      if (!urlPath || !this.referencesImage(urlPath, imageName)) {
+        i++;
+        continue;
+      }
+
+      const lineOfMatch = this.lineAtOffset(text, match.index);
+      if (lineOfMatch <= targetLine && lineOfMatch > bestLine) {
+        bestLine = lineOfMatch;
+        bestIndex = i;
+      }
+      i++;
+    }
+
+    // Also check wiki-style embeds
+    const wikiRegex = /!\[\[([^\]|]+)(?:\|[^\]]*)?\]\]/g;
+    while ((match = wikiRegex.exec(text)) !== null) {
+      const target = match[1] ?? "";
+      if (!target || !this.referencesImage(target, imageName)) {
+        i++;
+        continue;
+      }
+
+      const lineOfMatch = this.lineAtOffset(text, match.index);
+      if (lineOfMatch <= targetLine && lineOfMatch > bestLine) {
+        bestLine = lineOfMatch;
+        bestIndex = i;
+      }
+      i++;
+    }
+
+    return bestIndex;
+  }
+
+  /**
+   * Return the 0-based line number for a byte offset in `text`.
+   */
+  private lineAtOffset(text: string, offset: number): number {
+    let line = 0;
+    const end = Math.min(offset, text.length);
+    for (let i = 0; i < end; i++) {
+      if (text[i] === "\n") line++;
+    }
+    return line;
+  }
+  /**
+   * Rewrites the width for the image reference at `ordinal`
    * embeds `![[target|width]]`. Any existing size suffix is replaced; if
    * none exists, one is appended.
    */
-  private setImageWidthInText(text: string, imageName: string, width: number, ordinal: number): string {
+  private setImageWidthInText(
+    text: string,
+    imageName: string,
+    width: number,
+    ordinal: number,
+  ): string {
     type Replacement = { start: number; end: number; text: string };
     const replacements: Replacement[] = [];
 
@@ -224,7 +341,10 @@ export class MouseWheelZoomManager {
   private getActivePaneWithImage(imageElement: Element): TFile | null {
     const leaves = this.app.workspace.getLeavesOfType("markdown");
     for (const leaf of leaves) {
-      if (leaf.view instanceof MarkdownView && leaf.view.containerEl.contains(imageElement)) {
+      if (
+        leaf.view instanceof MarkdownView
+        && leaf.view.containerEl.contains(imageElement)
+      ) {
         return leaf.view.file;
       }
     }
