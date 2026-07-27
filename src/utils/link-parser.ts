@@ -64,7 +64,9 @@ export function parseHeadingsFromText(text: string): SectionHeadingInfo[] {
 export function parseLinksFromText(text: string): LinkItem[] {
   const items: LinkItem[] = [];
   const headings = parseHeadingsFromText(text);
-  const regex = /(!)?\[\[([^\]|#]+)?(#?[^\]|]*)?(?:\|([^\]]+))?\]\]|(!)?\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+  // Matches WikiLinks (!?[[target|display]]) OR Markdown links (!?[display](target))
+  // including markdown links containing nested image embeds like [![alt](img)](#target)
+  const regex = /(!)?\[\[([^\]|#]+)?(#?[^\]|]*)?(?:\|([^\]]+))?\]\]|(!)?\[((?:[^[\]]|!\[[^[\]]*\]\([^()]*\))*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 
   let match: RegExpExecArray | null;
   while ((match = regex.exec(text)) !== null) {
@@ -86,7 +88,9 @@ export function parseLinksFromText(text: string): LinkItem[] {
     } else if (match[7] !== undefined) {
       // Markdown link or embed
       isEmbed = match[5] === "!";
-      displayText = (match[6] ?? "").trim();
+      const rawDisplay = (match[6] ?? "").trim();
+      // If display text contains an embedded image ![alt](src), clean it for display
+      displayText = rawDisplay.replace(/!\[([^\]]*)\]\([^)]*\)/g, "$1").trim() || rawDisplay;
       target = match[7].trim();
     }
 
@@ -119,18 +123,25 @@ export function parseLinksFromText(text: string): LinkItem[] {
 }
 
 export function extractLinksFromView(app: App, view: MarkdownView): LinkItem[] {
-  const file = view.file;
-  const items: LinkItem[] = [];
+  let content = "";
+  if (view.getMode() === "source" && view.editor) {
+    content = view.editor.getValue();
+  } else if (view.data) {
+    content = view.data;
+  }
 
-  if (file) {
+  const file = view.file;
+  if (!content && file) {
     const cache = app.metadataCache.getFileCache(file);
-    if (cache) {
+    if (cache?.links || cache?.embeds) {
+      // fallback to metadataCache parsing if no content loaded in view
       const headings: SectionHeadingInfo[] = (cache.headings ?? []).map((h) => ({
         heading: h.heading,
         line: h.position.start.line,
         offset: h.position.start.offset,
       }));
 
+      const items: LinkItem[] = [];
       if (cache.links) {
         for (const l of cache.links) {
           const text = l.displayText && l.displayText.trim() ? l.displayText.trim() : l.link;
@@ -146,7 +157,6 @@ export function extractLinksFromView(app: App, view: MarkdownView): LinkItem[] {
           });
         }
       }
-
       if (cache.embeds) {
         for (const e of cache.embeds) {
           const text = e.displayText && e.displayText.trim() ? e.displayText.trim() : e.link;
@@ -162,27 +172,32 @@ export function extractLinksFromView(app: App, view: MarkdownView): LinkItem[] {
           });
         }
       }
+      items.sort((a, b) => (a.position?.start?.offset ?? 0) - (b.position?.start?.offset ?? 0));
+      items.forEach((item, idx) => {
+        item.index = idx;
+      });
+      return items;
     }
   }
 
-  if (items.length > 0) {
-    items.sort((a, b) => (a.position?.start?.offset ?? 0) - (b.position?.start?.offset ?? 0));
-    items.forEach((item, idx) => {
-      item.index = idx;
-    });
-    return items;
-  }
-
-  // Fallback to raw text parsing if metadataCache has no items
-  let content = "";
-  if (view.getMode() === "source") {
-    content = view.editor.getValue();
-  } else if (view.data) {
-    content = view.data;
-  }
-
   if (content) {
-    return parseLinksFromText(content);
+    const items = parseLinksFromText(content);
+    if (file) {
+      const cache = app.metadataCache.getFileCache(file);
+      if (cache?.headings) {
+        const headings: SectionHeadingInfo[] = cache.headings.map((h) => ({
+          heading: h.heading,
+          line: h.position.start.line,
+          offset: h.position.start.offset,
+        }));
+        for (const item of items) {
+          if (!item.sectionHeading) {
+            item.sectionHeading = findSectionHeading(headings, item.position.start);
+          }
+        }
+      }
+    }
+    return items;
   }
 
   return [];

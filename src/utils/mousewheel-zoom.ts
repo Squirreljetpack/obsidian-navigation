@@ -151,12 +151,12 @@ export class MouseWheelZoomManager {
     // later rewrite the occurrence at that same position in the source text.
     const ordinal = this.getImageOrdinal(img, rawImageName);
 
-    await this.app.vault.process(file, (text) => this.setImageWidthInText(text, imageName!, width, ordinal));
+    await this.app.vault.process(file, (text) => this.setImageWidthInText(text, imageName, width, ordinal));
   }
 
   private getImageOrdinal(img: HTMLImageElement, rawImageName: string): number {
     const container = img.closest<HTMLElement>(".markdown-rendered, .markdown-source-view, .cm-content")
-      ?? (img.ownerDocument.body as HTMLElement);
+      ?? img.ownerDocument.body;
 
     const sameNameImages = Array.from(container.querySelectorAll("img")).filter(
       (candidate) => ImageZoomUtil.getLocalImageNameFromUri(candidate.getAttribute("src") ?? "") === rawImageName,

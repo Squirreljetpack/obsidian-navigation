@@ -28,21 +28,48 @@ export class LinksModal extends SuggestModal<LinkItem> {
   private originalPreviewScrollLeft: number | null = null;
 
   private activePreviewEl: HTMLElement | null = null;
+  private initialQuery: string;
 
-  constructor(app: App, view: MarkdownView, items: LinkItem[]) {
+  constructor(app: App, view: MarkdownView, items: LinkItem[], initialQuery?: string) {
     super(app);
     this.view = view;
     this.items = items;
+    this.initialQuery = initialQuery ?? this.getSelectionFromView(view);
 
     this.setPlaceholder("Filter links...");
     this.updateInstructions();
     this.registerKeybindings();
   }
 
+  private getSelectionFromView(view: MarkdownView): string {
+    const mode = view.getMode();
+    if (mode === "source") {
+      const editor = view.editor;
+      if (editor) {
+        const selection = editor.getSelection();
+        if (selection) {
+          return selection.trim().replace(/\s+/g, " ");
+        }
+      }
+    } else if (mode === "preview") {
+      const selection = window.getSelection()?.toString();
+      if (selection) {
+        return selection.trim().replace(/\s+/g, " ");
+      }
+    }
+    return "";
+  }
+
   onOpen(): void {
     void super.onOpen();
 
     this.saveOriginalState();
+
+    if (this.initialQuery) {
+      this.inputEl.value = this.initialQuery;
+      this.inputEl.dispatchEvent(new Event("input"));
+      this.inputEl.select();
+    }
 
     if (this.chooser) {
       const originalSetSelectedItem = this.chooser.setSelectedItem.bind(this.chooser);
@@ -114,9 +141,78 @@ export class LinksModal extends SuggestModal<LinkItem> {
   }
 
   private onSelectionChanged(index: number): void {
-    const item = this.chooser?.values?.[index] ?? this.items[index];
+    if (this.chooser?.values) {
+      const item = this.chooser.values[index];
+      if (!item) return;
+      this.navigateToLink(item);
+      return;
+    }
+    const item = this.items[index];
     if (!item) return;
     this.navigateToLink(item);
+  }
+
+  private findPreviewElement(container: HTMLElement, item: LinkItem): HTMLElement | null {
+    const candidates = Array.from(
+      container.querySelectorAll<HTMLElement>("a.internal-link, a.external-link, a[href], a[data-href], .internal-embed, img")
+    );
+
+    const normTarget = (t: string) => {
+      let cleaned = t.trim();
+      try {
+        cleaned = decodeURIComponent(cleaned);
+      } catch {
+        // ignore
+      }
+      return cleaned.replace(/^[#/.\\]+/, "").toLowerCase();
+    };
+
+    const targetKey = normTarget(item.target);
+    const sameTargetItems = this.items.filter((i) => normTarget(i.target) === targetKey);
+    const occurrenceIndex = sameTargetItems.indexOf(item);
+
+    const matchingElements = candidates.filter((el) => {
+      const raw = el.getAttribute("data-href") || el.getAttribute("href") || el.getAttribute("src");
+      if (!raw) return false;
+      const key = normTarget(raw);
+      if (key === targetKey || key.endsWith(targetKey) || targetKey.endsWith(key)) {
+        return true;
+      }
+      return false;
+    });
+
+    if (matchingElements.length > 0) {
+      const index = occurrenceIndex >= 0 && occurrenceIndex < matchingElements.length
+        ? occurrenceIndex
+        : 0;
+      return matchingElements[index] ?? null;
+    }
+
+    const normText = (txt: string) => txt.trim().toLowerCase();
+    const textKey = normText(item.text);
+
+    if (textKey) {
+      const textMatches = candidates.filter((el) => {
+        const txt = el.textContent ? normText(el.textContent) : "";
+        return txt === textKey || (txt.length > 0 && textKey.includes(txt));
+      });
+
+      if (textMatches.length > 0) {
+        const textOccurrence = this.items.filter((i) => normText(i.text) === textKey).indexOf(item);
+        const index = textOccurrence >= 0 && textOccurrence < textMatches.length ? textOccurrence : 0;
+        return textMatches[index] ?? null;
+      }
+    }
+
+    const idxEl = candidates[item.index];
+    if (idxEl) {
+      const raw = idxEl.getAttribute("data-href") || idxEl.getAttribute("href") || idxEl.getAttribute("src") || "";
+      if (normTarget(raw) === targetKey || (idxEl.textContent && normText(idxEl.textContent) === textKey)) {
+        return idxEl;
+      }
+    }
+
+    return null;
   }
 
   private navigateToLink(item: LinkItem): void {
@@ -141,21 +237,7 @@ export class LinksModal extends SuggestModal<LinkItem> {
 
       const container = previewMode.containerEl;
       if (container) {
-        const elements = Array.from(
-          container.querySelectorAll<HTMLElement>("a.internal-link, a.external-link, .internal-embed, img")
-        );
-
-        let matchedEl: HTMLElement | null = elements[item.index] ?? null;
-
-        if (!matchedEl) {
-          matchedEl =
-            elements.find((el) => {
-              const href = el.getAttribute("data-href") || el.getAttribute("href") || el.getAttribute("src");
-              if (href && (href === item.target || href.endsWith(item.target))) return true;
-              if (el.textContent && el.textContent.trim() === item.text.trim()) return true;
-              return false;
-            }) ?? null;
-        }
+        const matchedEl = this.findPreviewElement(container, item);
 
         this.clearPreviewHighlight();
 
@@ -177,14 +259,16 @@ export class LinksModal extends SuggestModal<LinkItem> {
 
   private updateInstructions(): void {
     const isMac = Platform.isMacOS;
-    const openMod = isMac ? "⌘↵" : "Ctrl+Enter";
+    const openNewMod = isMac ? "⌘↵" : "Ctrl+Enter";
+    const openSameMod = isMac ? "⇧↵" : "Shift+Enter";
     const toggleMod = isMac ? "⌘S" : "Ctrl+S";
     const togglePurpose = this.showHeadingOnRight ? "Show line" : "Show heading";
 
     this.setInstructions([
       { command: "↑↓", purpose: "Navigate" },
       { command: "↵", purpose: "Jump to link" },
-      { command: openMod, purpose: "Open target" },
+      { command: openSameMod, purpose: "Open target" },
+      { command: openNewMod, purpose: "Open in new tab" },
       { command: toggleMod, purpose: togglePurpose },
       { command: "Esc", purpose: "Dismiss" },
     ]);
@@ -196,7 +280,16 @@ export class LinksModal extends SuggestModal<LinkItem> {
       const item = this.getHighlightedItem();
       if (item) {
         this.close();
-        void this.openTarget(item);
+        void this.openTarget(item, true);
+      }
+    });
+
+    this.scope.register(["Shift"], "Enter", (evt: KeyboardEvent) => {
+      evt.preventDefault();
+      const item = this.getHighlightedItem();
+      if (item) {
+        this.close();
+        void this.openTarget(item, false);
       }
     });
 
@@ -256,7 +349,9 @@ export class LinksModal extends SuggestModal<LinkItem> {
 
   onChooseSuggestion(item: LinkItem, evt: MouseEvent | KeyboardEvent): void {
     if (evt && (evt.metaKey || evt.ctrlKey || Keymap.isModEvent(evt))) {
-      void this.openTarget(item);
+      void this.openTarget(item, true);
+    } else if (evt && evt.shiftKey) {
+      void this.openTarget(item, false);
     } else {
       this.accepted = true;
       this.jumpToLink(item);
@@ -287,21 +382,7 @@ export class LinksModal extends SuggestModal<LinkItem> {
 
       const container = previewMode.containerEl;
       if (container) {
-        const elements = Array.from(
-          container.querySelectorAll<HTMLElement>("a.internal-link, a.external-link, .internal-embed, img")
-        );
-
-        let matchedEl: HTMLElement | null = elements[item.index] ?? null;
-
-        if (!matchedEl) {
-          matchedEl =
-            elements.find((el) => {
-              const href = el.getAttribute("data-href") || el.getAttribute("href") || el.getAttribute("src");
-              if (href && (href === item.target || href.endsWith(item.target))) return true;
-              if (el.textContent && el.textContent.trim() === item.text.trim()) return true;
-              return false;
-            }) ?? null;
-        }
+        const matchedEl = this.findPreviewElement(container, item);
 
         if (matchedEl) {
           matchedEl.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -314,7 +395,7 @@ export class LinksModal extends SuggestModal<LinkItem> {
     }
   }
 
-  private async openTarget(item: LinkItem): Promise<void> {
+  private async openTarget(item: LinkItem, newLeaf = true): Promise<void> {
     const target = item.target.trim();
     if (!target) return;
 
@@ -326,6 +407,6 @@ export class LinksModal extends SuggestModal<LinkItem> {
 
     const activeFile = this.view.file;
     const sourcePath = activeFile ? activeFile.path : "";
-    await this.app.workspace.openLinkText(target, sourcePath, true);
+    await this.app.workspace.openLinkText(target, sourcePath, newLeaf);
   }
 }
