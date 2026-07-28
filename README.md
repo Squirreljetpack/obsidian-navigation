@@ -8,7 +8,6 @@ Various navigation-related tools for Obsidian.
 - **Custom hotkeys**: Launch custom scripts on items from the fuzzy finder.
 - **Toggle sidebars / fullscreen**: Toggle workspace sidebars or fullscreen, with Maximillion/zen mode compatibility.
 - **Link searcher**: Quickly search and jump to links within the active note.
-- **Mouse wheel image zoom**: Resize images dynamically using mouse wheel scrolling while holding a modifier key.
 
 ## Commands
 
@@ -31,4 +30,3 @@ Squirreljetpack/obsidian-navigation
 ## License
 
 [MIT](LICENSE)
-
