@@ -15,7 +15,13 @@ declare module "obsidian" {
 		plugins?: {
 			plugins?: Record<
 				string,
-				{ enabled?: boolean; active?: boolean; header?: { active?: boolean } }
+				{
+					enabled?: boolean;
+					active?: boolean;
+					header?: { active?: boolean };
+					// Maxymillion's Zen plugin exposes its active state as settings.enabled
+					settings?: { enabled?: boolean };
+				}
 			>;
 		};
 	}
