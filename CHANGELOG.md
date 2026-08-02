@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.4.2
+
+- **Fix**: Exit Zen mode when toggling sidebars open or exiting fullscreen, using the correct state/command API of Maxymillion's Zen plugin (`settings.enabled` / `zen:toggle`).
+
 ## 1.4.0
 
 - **Feature**: Mouse wheel image zoom with configurable modifier key, step size, and initial size text box setting (default 300px).
@@ -12,7 +16,6 @@
 - **Feature**: Bind `Shift + Tab` in navigator modal to reveal highlighted item or folder in Obsidian folder navigation (File Explorer).
 - **Feature**: Support custom hotkey overrides so user-configured hotkeys take precedence over built-in modal bindings.
 - **Feature**: Command to close all right sidebar views
-
 
 ## 1.2.0
 
